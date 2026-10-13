@@ -1,0 +1,4 @@
+storage_account_name = "REPLACE_WITH_YOUR_STATE_ACCOUNT"
+container_name       = "tfstate"
+key                  = "mmaug/azure-demo.tfstate"
+use_azuread_auth     = true

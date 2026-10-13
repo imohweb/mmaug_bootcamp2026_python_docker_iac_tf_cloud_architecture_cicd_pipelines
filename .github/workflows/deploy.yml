@@ -1,0 +1,69 @@
+name: Deploy Azure demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: azure-demo-release
+  cancel-in-progress: false
+
+jobs:
+  test:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install -r launchpad-lab/requirements.txt
+      - run: cd launchpad-lab && python -m unittest -v
+
+  release:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: azure-demo
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      AZURE_WEB_APP_NAME: ${{ vars.AZURE_WEB_APP_NAME }}
+      AZURE_VM_NAME: ${{ vars.AZURE_VM_NAME }}
+      VM_PUBLIC_IP: ${{ vars.VM_PUBLIC_IP }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Sign in without a client secret
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build once, push once, resolve immutable image
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ACR_NAME" =~ ^[a-zA-Z0-9]{5,50}$ ]] || { echo "Invalid ACR_NAME" >&2; exit 1; }
+          registry=$(az acr show --name "$ACR_NAME" --query loginServer --output tsv)
+          [[ "$registry" =~ ^[a-zA-Z0-9]+\.azurecr\.io$ ]] || { echo "Invalid registry hostname" >&2; exit 1; }
+          tag="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          az acr login --name "$ACR_NAME" --output none
+          docker build --platform linux/amd64 -t "$registry/launchpad:$tag" launchpad-lab
+          docker push "$registry/launchpad:$tag"
+          digest=$(az acr repository show --name "$ACR_NAME" --image "launchpad:$tag" --query digest --output tsv)
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "Invalid image digest" >&2; exit 1; }
+          echo "IMAGE_REF=$registry/launchpad@$digest" >> "$GITHUB_ENV"
+          echo "Release image: $registry/launchpad@$digest" >> "$GITHUB_STEP_SUMMARY"
+      - name: Deploy the same digest to App Service and VM
+        run: bash scripts/deploy-azure.sh

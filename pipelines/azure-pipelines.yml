@@ -1,0 +1,103 @@
+name: launchpad-$(Date:yyyyMMdd)-$(Rev:r)
+
+trigger:
+  branches:
+    include: [main]
+pr:
+  branches:
+    include: [main]
+
+parameters:
+  - name: deploy
+    displayName: Build and deploy Azure demo (main only)
+    type: boolean
+    default: false
+  - name: azureServiceConnection
+    displayName: Workload identity federation service connection
+    type: string
+    default: azure-demo-wif
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: Test
+    jobs:
+      - job: PythonTests
+        steps:
+          - checkout: self
+            persistCredentials: false
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.12'
+          - bash: |
+              set -euo pipefail
+              pip install -r launchpad-lab/requirements.txt
+              cd launchpad-lab
+              python -m unittest -v
+            displayName: Test the Python app
+
+  - stage: Build
+    dependsOn: Test
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ${{ eq(parameters.deploy, true) }})
+    jobs:
+      - job: BuildImage
+        steps:
+          - checkout: self
+            persistCredentials: false
+          - task: AzureCLI@2
+            name: publishImage
+            displayName: Build, push, and export image digest
+            inputs:
+              azureSubscription: ${{ parameters.azureServiceConnection }}
+              scriptType: bash
+              scriptLocation: inlineScript
+              addSpnToEnvironment: false
+              inlineScript: |
+                set -euo pipefail
+                [[ "$ACR_NAME" =~ ^[a-zA-Z0-9]{5,50}$ ]] || { echo "Invalid ACR_NAME" >&2; exit 1; }
+                registry=$(az acr show --name "$ACR_NAME" --query loginServer --output tsv)
+                [[ "$registry" =~ ^[a-zA-Z0-9]+\.azurecr\.io$ ]] || { echo "Invalid registry hostname" >&2; exit 1; }
+                tag="${SOURCE_SHA}-${BUILD_ID}-${JOB_ATTEMPT}"
+                az acr login --name "$ACR_NAME" --output none
+                docker build --platform linux/amd64 -t "$registry/launchpad:$tag" launchpad-lab
+                docker push "$registry/launchpad:$tag"
+                digest=$(az acr repository show --name "$ACR_NAME" --image "launchpad:$tag" --query digest --output tsv)
+                [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "Invalid image digest" >&2; exit 1; }
+                echo "##vso[task.setvariable variable=imageRef;isOutput=true]$registry/launchpad@$digest"
+            env:
+              ACR_NAME: $(ACR_NAME)
+              SOURCE_SHA: $(Build.SourceVersion)
+              BUILD_ID: $(Build.BuildId)
+              JOB_ATTEMPT: $(System.JobAttempt)
+
+  - stage: Deploy
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ${{ eq(parameters.deploy, true) }})
+    variables:
+      IMAGE_REF: $[ stageDependencies.Build.BuildImage.outputs['publishImage.imageRef'] ]
+    jobs:
+      - deployment: AzureDemo
+        displayName: Deploy one image to both targets
+        environment: azure-demo
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  persistCredentials: false
+                - task: AzureCLI@2
+                  displayName: Deploy via shared scripts
+                  inputs:
+                    azureSubscription: ${{ parameters.azureServiceConnection }}
+                    scriptType: bash
+                    scriptLocation: scriptPath
+                    scriptPath: scripts/deploy-azure.sh
+                    addSpnToEnvironment: false
+                  env:
+                    IMAGE_REF: $(IMAGE_REF)
+                    AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
+                    AZURE_RESOURCE_GROUP: $(AZURE_RESOURCE_GROUP)
+                    ACR_NAME: $(ACR_NAME)
+                    AZURE_WEB_APP_NAME: $(AZURE_WEB_APP_NAME)
+                    AZURE_VM_NAME: $(AZURE_VM_NAME)

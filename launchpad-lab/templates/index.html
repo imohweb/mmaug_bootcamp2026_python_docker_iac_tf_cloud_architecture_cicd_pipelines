@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MMAUG Launchpad</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">MMAUG / 17 OCTOBER 2026</p>
+    <h1>Write it. Pack it.<br>Declare it.</h1>
+    <p>One Python application. Docker packaging. Terraform infrastructure.</p>
+    <section class="cards" aria-label="Delivery stages">
+      <span>01 / PYTHON</span><span>02 / DOCKER</span><span>03 / TERRAFORM</span>
+    </section>
+    <form id="summary-form">
+      <label for="values">Three comma-separated integers</label>
+      <input id="values" name="values" value="5,10,15" required maxlength="120">
+      <button type="submit">Launch calculation</button>
+    </form>
+    <pre id="result" aria-live="polite">Ready for launch.</pre>
+    <p id="greeting" aria-live="polite"></p>
+    <p class="muted">A teaching app: no authentication, database, or AI model.</p>
+  </main>
+</body>
+</html>

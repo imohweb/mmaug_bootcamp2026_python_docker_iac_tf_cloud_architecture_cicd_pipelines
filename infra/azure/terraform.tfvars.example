@@ -1,0 +1,7 @@
+subscription_id     = "00000000-0000-0000-0000-000000000000"
+prefix              = "mmaugyourname26"
+location            = "westeurope"
+ssh_public_key_path = "~/.ssh/mmaug-demo.pub"
+vm_size             = "Standard_B2s"
+app_service_sku     = "B1"
+image_tag           = "bootstrap"
