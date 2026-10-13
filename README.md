@@ -1,4 +1,10 @@
-# MMAUG Bootcamp 2026: Fundamentals to Cloud Architecture and CI/CD
+# MMAUG Bootcamp 2026: Python, Docker, Terraform, Cloud Architecture & CI/CD Pipelines
+
+**27 October: Advanced Cloud Architecture & DevOps CI/CD Pipeline Process**,
+building on the **17 October Python, Docker & Terraform fundamentals**.
+
+Public repository:
+[mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines](https://github.com/imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines).
 
 One shared participant repository for two connected sessions:
 
@@ -9,8 +15,8 @@ One shared participant repository for two connected sessions:
 
 The hands-on journey follows one Python web application from local execution
 through Docker packaging to Terraform-managed resources and Azure delivery.
-Keep the same repository URL and application; there is no separate October 27
-copy of the Python app.
+Both dates use this renamed repository and the same application; there is no
+separate October 27 copy of the Python app.
 
 ## Choose your session
 

@@ -13,8 +13,8 @@ required.
 ## 1. Clone and choose a directory
 
 ```bash
-git clone https://github.com/imohweb/mmaug_bootcamp2026_python_docker_iac_fundamentals_beginner_level.git
-cd mmaug_bootcamp2026_python_docker_iac_fundamentals_beginner_level
+git clone https://github.com/imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines.git
+cd mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines
 git branch --show-current
 # Expected: main
 cd launchpad-lab
@@ -23,6 +23,18 @@ cd launchpad-lab
 If using the supplied local folder, open a terminal inside `launchpad-lab`.
 Paths in examples are relative to the cloned repository, not the presenter's
 personal computer.
+
+If you cloned before the repository was renamed, keep your existing folder.
+From that clone's root, update its remote:
+
+```bash
+git remote set-url origin https://github.com/imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines.git
+git remote -v
+```
+
+GitHub redirects old repository links, but the GitHub Actions OIDC subject
+changes with the repository name. If Azure federation was already configured,
+update its trust as explained in the [pipeline guide](04-pipelines.md).
 
 ## 2. Local Python
 

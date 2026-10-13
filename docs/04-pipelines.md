@@ -71,7 +71,7 @@ RG Contributor is a beginner-friendly but broad permission. VM Run Command is **
 2. Create an Entra app/service principal (or a dedicated supported federated identity). Add a federated credential with:
    - issuer: `https://token.actions.githubusercontent.com`
    - audience: `api://AzureADTokenExchange`
-   - subject: `repo:imohweb/mmaug_bootcamp2026_python_docker_iac_fundamentals_beginner_level:environment:azure-demo`
+   - subject: `repo:imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines:environment:azure-demo`
 3. Assign the pipeline roles above. For a fork or renamed repository, replace the owner/repository part of the subject exactly.
 4. Add these **environment variables** to `azure-demo`:
 
@@ -87,6 +87,22 @@ RG Contributor is a beginner-friendly but broad permission. VM Run Command is **
 | `VM_PUBLIC_IP` | optional single public IPv4; omit to query the VM |
 
 No `AZURE_CLIENT_SECRET`, registry password, SSH key, or publish profile is used. IDs and resource names are configuration, not authentication secrets.
+
+### Existing federation after the repository rename
+
+The repository now uses the name
+`mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines`.
+GitHub URL redirects do not update Microsoft Entra federated credentials.
+If you configured trust using the former name, update that credential's
+repository subject to the exact value above before deploying. Keep issuer,
+audience and the protected environment aligned with the workflow. Remove stale
+trust for the former repository name after verifying the replacement.
+
+The Azure identity and its client ID can remain the same; changing the repository
+name does not require a client secret or broader permissions. Review GitHub
+environment variables, deployment restrictions and any external Azure DevOps
+repository connection as well. These external settings are not changed by
+editing this guide.
 
 ### Files and execution order
 
