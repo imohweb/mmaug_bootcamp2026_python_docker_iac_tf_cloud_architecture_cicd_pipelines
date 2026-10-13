@@ -10,8 +10,8 @@ One shared participant repository for two connected sessions:
 
 | Date | Session | Learning path |
 | --- | --- | --- |
-| **17 October 2026** | **Python, Docker & Terraform IaC Fundamentals for Beginners** | Understand and test the app, package it, and introduce infrastructure and delivery concepts. |
-| **27 October 2026** | **Advanced Cloud Architecture & DevOps CI/CD Pipeline Process** | Reuse the app to examine Azure architecture, infrastructure ownership, state, federated delivery, release controls and DevSecOps. |
+| **17 October 2026** | **Python, Docker & Terraform IaC Fundamentals for Beginners** | Understand and test the app, package it, and learn the Terraform workflow. A short CI/CD handoff overview only; no DevSecOps workshop. |
+| **27 October 2026** | **Advanced Cloud Architecture & DevOps CI/CD Pipeline Process** | Azure architecture, advanced GitHub Actions/Azure DevOps delivery, federated identities, approvals, verification, recovery and the DevSecOps/CodeQL workshop. |
 
 The hands-on journey follows one Python web application from local execution
 through Docker packaging to Terraform-managed resources and Azure delivery.
@@ -24,10 +24,16 @@ separate October 27 copy of the Python app.
 
 Start with [setup](docs/00-start-here.md), [Python](docs/01-python-explained.md)
 and [Docker](docs/02-docker.md), then the local Docker Terraform exercise in
-the [Terraform guide](docs/03-terraform-azure.md). Azure delivery and CodeQL
-can be introduced as instructor-led previews.
+the [Terraform guide](docs/03-terraform-azure.md). Explain modules, state and
+the purpose of automation without requiring pipeline or scanner configuration.
 
-### 27 October: deepen the architecture and delivery process
+The checkpoint is a tested app running locally, in Docker and under Terraform
+control, followed by scoped cleanup. A short "tests -> image -> deployment"
+overview can bridge to the next session. Detailed pipeline configuration,
+federation, release approvals and **all DevSecOps/CodeQL exercises belong to
+27 October**, not the October 17 lab.
+
+### 27 October: advanced CI/CD and DevSecOps workshop
 
 Carry forward the tested `launchpad-lab` app and its container contract:
 
@@ -36,24 +42,35 @@ Carry forward the tested `launchpad-lab` app and its container contract:
 2. Examine state ownership, Azure Blob backend migration, locking and import.
 3. Configure federated identities, review permissions and trace the same image
    digest through [GitHub Actions and Azure DevOps](docs/04-pipelines.md).
-4. Verify both deployments, discuss approvals and deliberate rollback, and
-   inspect [CodeQL results and security-policy boundaries](docs/05-devsecops-codeql.md).
-5. Run the offline deployment regression scenarios, then review cleanup and costs.
+4. Run the [DevSecOps and CodeQL workshop](docs/05-devsecops-codeql.md):
+   review both language jobs, triage alerts, distinguish checks from security
+   gates, and define the evidence required for release approval.
+5. Run the offline deployment regression scenarios, approve a reviewed release,
+   verify both public targets, and discuss partial failures and deliberate
+   rollback using a known-good digest.
+6. Review missing production controls and cleanup/cost responsibilities.
 
 These are learning paths through the existing materials, not a claim that
 additional production controls are already implemented. The current VM remains
 an HTTP-only teaching target, and CodeQL is standalone scanning, not an
 automatic alerts-based release gate.
 
-## Start here
+## Reading routes
 
-1. [Setup and command reference](docs/00-start-here.md)
-2. [Python: every source file explained](docs/01-python-explained.md)
-3. [Docker: recipe, runtime, commands and troubleshooting](docs/02-docker.md)
-4. [Terraform: modules, local state, Azure Blob migration and import](docs/03-terraform-azure.md)
-5. [GitHub Actions and Azure DevOps delivery](docs/04-pipelines.md)
-6. [DevSecOps and CodeQL setup](docs/05-devsecops-codeql.md)
-7. [17 October participant slide PDF](docs/MMAUG_Python_docker_terraform_Fundamentals_Participant.pdf)
+| Material | 17 October | 27 October |
+| --- | --- | --- |
+| [Setup and command reference](docs/00-start-here.md) | Start here; follow the foundations sequence | Refresh local checks; follow the advanced sequence |
+| [Python: every source file explained](docs/01-python-explained.md) | Core lab | Prerequisite/reference |
+| [Docker: recipe, runtime, commands and troubleshooting](docs/02-docker.md) | Core lab | Image/runtime prerequisite |
+| [Terraform: modules, local state, Azure Blob migration and import](docs/03-terraform-azure.md) | Local workflow and IaC concepts | Azure architecture and collaborative state workflow |
+| [GitHub Actions and Azure DevOps delivery](docs/04-pipelines.md) | Optional reference, not a configuration lab | Advanced delivery workshop |
+| [DevSecOps and CodeQL setup](docs/05-devsecops-codeql.md) | Reserved for the next session | DevSecOps workshop |
+| [17 October participant slide PDF](docs/MMAUG_Python_docker_terraform_Fundamentals_Participant.pdf) | Foundations slides | Existing advanced slides are optional reference |
+
+The existing slide pack remains intact. Its detailed CI/CD and DevSecOps slides
+are reference material for October 27, not requirements to cover on October 17.
+The session split changes the teaching order, **not** workflow triggers:
+repository CI and CodeQL scanning remain enabled before and between sessions.
 
 ## Repository map
 

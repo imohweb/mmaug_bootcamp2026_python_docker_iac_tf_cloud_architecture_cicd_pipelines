@@ -1,16 +1,34 @@
 # 04 — Two pipelines, one immutable Docker image
 
-## Session progression
+**27 October 2026 — Advanced Cloud Architecture & DevOps CI/CD Pipeline Process**
 
-On **17 October 2026**, use this guide to introduce the build/test/release
-handoff. On **27 October 2026**, return to the same files for **Advanced Cloud
-Architecture & DevOps CI/CD Pipeline Process**: examine hosting trade-offs,
-federated trust, scoped permissions, artifact identity, environment approvals,
-runtime verification and recovery.
+## Session placement
+
+This is the **October 27 advanced delivery workshop**, not an October 17
+configuration lab. The earlier session only needs a short conceptual
+build/test/release handoff; participants do not need cloud release identities,
+protected environments or scanner configuration to finish the foundations.
 
 The app and shared deployment scripts do not change merely because the session
 is more advanced. Choose one orchestrator at a time, and distinguish the
 implemented demo from production controls that remain to be added.
+
+## October 27 workshop checkpoints
+
+| Step | Exercise | Evidence to inspect |
+| --- | --- | --- |
+| 1. Architecture and ownership | Compare App Service and VM/Nginx; separate Terraform-owned infrastructure from pipeline-owned image releases | Module outputs, lifecycle ignore for the release image, hosting responsibilities |
+| 2. Trust and release control | Configure federation, scoped roles, `main` restrictions and external environment approvals | Exact OIDC subject/WIF connection, assigned scopes and approval settings |
+| 3. Stage and artifact handoffs | Trace both pipeline definitions, then choose one orchestrator for the live demo | Tests, release tag, resolved ACR digest and cross-stage output |
+| 4. DevSecOps review | Complete [the CodeQL workshop](05-devsecops-codeql.md) before approving a release | Both scan jobs, alerts, reviewed commit and explicit policy limitations |
+| 5. Delivery verification | Run offline regression checks, deploy the reviewed digest and inspect both targets | Deployment logs, guest marker, `/health` and `/sum` payloads |
+| 6. Recovery and cleanup | Discuss partial success and redeploying a known-good digest; clean up paid resources | Target status, prior release digest and reviewed destroy plan |
+
+This is a teaching sequence, not new pipeline wiring. The CodeQL review in
+step 4 is an approver's responsibility in the current demo; the deployment
+workflow does not automatically await scans or enforce an alerts threshold.
+Discuss image/dependency scanning, SBOM/provenance and automated security gates
+as additional controls to implement, not as features already present.
 
 ## What you will build
 

@@ -1,5 +1,18 @@
 # Terraform: from local initiation to Azure modules and remote state
 
+## Session placement
+
+**17 October:** teach the local Docker Terraform workflow, resource lifecycle,
+plans, module concepts and state fundamentals. The later Azure examples remain
+available for explanation/reference without requiring a cloud deployment.
+
+**27 October:** use the Azure modules to compare hosting architectures, examine
+collaborative state/migration/import, and establish the infrastructure
+prerequisites for the [advanced pipeline workshop](04-pipelines.md). Detailed
+release configuration and [DevSecOps exercises](05-devsecops-codeql.md) belong
+to that session. Keep infrastructure ownership separate from image-release
+ownership.
+
 ## 1. Mental model and local Docker lab
 
 HCL declares desired resource attributes. A provider talks to the resource API.

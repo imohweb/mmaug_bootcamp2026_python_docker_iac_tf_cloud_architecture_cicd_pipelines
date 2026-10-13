@@ -1,20 +1,42 @@
 # 05 — DevSecOps and CodeQL without magic
 
+**27 October 2026 — Advanced Cloud Architecture & DevOps CI/CD Pipeline Process**
+
 DevSecOps puts security feedback into the development/release process. It does not mean one scanner proves an application, image, infrastructure, or cloud subscription is secure.
 
-## Use across both sessions
+## Session placement and prerequisites
 
-- **17 October 2026:** introduce source scanning, run the provided workflow and
-  explain how to read its results.
-- **27 October 2026 — Advanced Cloud Architecture & DevOps CI/CD Pipeline
-  Process:** revisit the same workflow to distinguish successful analysis from
-  an alerts policy, examine approval and identity boundaries, and discuss where
-  additional security controls belong in the release process.
+The **DevSecOps workshop belongs to October 27**, alongside advanced CI/CD.
+It is not an October 17 exercise. Bring the tested Python app and Docker
+fundamentals from the earlier session, then read the
+[pipeline stage and identity guide](04-pipelines.md).
 
-The advanced discussion does not silently enable those additional controls.
-The implementation and limitations below remain the source of truth.
+Repository scans remain enabled before, during and between both sessions.
+Changing the curriculum does not delay scanning until October 27, disable its
+triggers, or silently add new security gates. The implementation and limitations
+below remain the source of truth.
 
 This repository includes a concrete [CodeQL workflow](../.github/workflows/codeql.yml), not only a slide example. It analyzes the Python API and the browser JavaScript in `launchpad-lab/static/app.js`.
+
+## October 27 workshop sequence
+
+1. Map the current pipeline: tests, source scanning, image publication, approval,
+   deployment and verification. Identify which steps are connected and which
+   run independently.
+2. Read the checked-in CodeQL workflow. Explain triggers, language jobs, action
+   pins and minimal permissions before running it.
+3. Inspect both analysis jobs and the code-scanning alerts view. For a real
+   alert, review the source/data flow, severity and remediation; record a reason
+   for any dismissal. A zero-alert scan needs no artificial vulnerable code.
+4. Distinguish workflow completion checks, merge policies and release gates.
+   Identify what requires external GitHub settings or new pipeline integration.
+5. Review a candidate release: commit, CI/scan results, outstanding alerts,
+   identity scopes, environment approval and immutable image digest.
+6. Discuss the missing image/dependency/secret/IaC checks, SBOM/provenance and
+   Defender integration. Define proposed enforcement and evidence, but label
+   these as **not implemented** unless actually configured and verified.
+7. After the chosen pipeline deploys, review target verification and the
+   known-good-digest recovery plan. A passing source scan is not runtime proof.
 
 ## What CodeQL actually does
 
@@ -74,11 +96,11 @@ The provided workflow is **standalone scanning**, not a deployment security gate
 | Release integrity | same ACR SHA-256 digest on both targets | signed provenance or an SBOM |
 | Release control | manual main-only release + external environment approvals | automatically blocking outstanding alerts |
 
-CodeQL is **not a universal misconfiguration scanner**. It does not replace Terraform policy checks, Docker image vulnerability scans, dependency auditing, secret scanning, or live configuration review. No image-CVE gate is included in these beginner pipelines; the image is built and pushed after tests. Add those tools as a deliberate next exercise rather than claiming CodeQL already provides them.
+CodeQL is **not a universal misconfiguration scanner**. It does not replace Terraform policy checks, Docker image vulnerability scans, dependency auditing, secret scanning, or live configuration review. No image-CVE gate is included in these teaching pipelines; the image is built and pushed after tests. Discuss those tools during the October 27 workshop as deliberate additional work rather than claiming CodeQL already provides them.
 
 Similarly, **Microsoft Defender for Cloud is not automatically integrated** by enabling CodeQL, using Azure login, or deploying into Azure. Defender plans, DevOps connectors, permissions, and any release-policy wiring require separate configuration and may have costs. No Defender connector or subscription policy is created by this repository.
 
-## Review habit for beginners
+## October 27 release-review checklist
 
 Before approving a release:
 

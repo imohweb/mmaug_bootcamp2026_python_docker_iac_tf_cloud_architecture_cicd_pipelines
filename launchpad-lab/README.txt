@@ -1,6 +1,8 @@
 MMAUG | 17 October 2026 | Python -> Docker -> Terraform
 =====================================================
-LOCAL LAB FIRST. Azure extensions and pipelines are explained in ../docs.
+OCTOBER 17: LOCAL LAB FIRST. Python, Docker and Terraform foundations.
+OCTOBER 27: Azure architecture, advanced CI/CD and DevSecOps in ../docs.
+Detailed pipeline configuration and the CodeQL workshop are not October 17 labs.
 This Flask API uses Gunicorn in Docker. app.py's local server is development-only.
 No AI model, user authentication or database is included.
 Required: Python 3.10+, Docker Engine or Docker Desktop (running, Linux
@@ -126,7 +128,10 @@ TROUBLESHOOTING
 SOURCE REFERENCES
    See ../docs/01-python-explained.md for every Python function and test.
    See ../docs/03-terraform-azure.md for modules, import and Azure Blob backend.
-   See ../docs/04-pipelines.md and ../docs/05-devsecops-codeql.md for delivery.
+   OCTOBER 27 WORKSHOPS:
+   See ../docs/04-pipelines.md for advanced delivery, approvals and verification.
+   See ../docs/05-devsecops-codeql.md for DevSecOps and source-scanning policy.
+   Repository scans remain enabled; these dates govern teaching, not triggers.
    https://docs.python.org/3/tutorial/
    https://docs.python.org/3/library/http.server.html
    https://docs.docker.com/get-started/

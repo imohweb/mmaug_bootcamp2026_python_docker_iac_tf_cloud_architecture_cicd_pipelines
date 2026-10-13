@@ -5,10 +5,10 @@ session and the **27 October 2026** session, **Advanced Cloud Architecture &
 DevOps CI/CD Pipeline Process**. Both use the same application, infrastructure
 examples and pipeline code. Presenter notes are intentionally not included.
 
-For October 17, begin with local Python, Docker and Terraform. For October 27,
-refresh those checks, then continue into the Azure modules, state workflow,
-pipeline configuration and DevSecOps guides. A second application clone is not
-required.
+For October 17, complete local Python, Docker and Terraform. Detailed pipeline
+and DevSecOps exercises are reserved for October 27. On that date, refresh the
+local checks and continue into Azure architecture, collaborative state, advanced
+delivery and CodeQL. A second application clone is not required.
 
 ## 1. Clone and choose a directory
 
@@ -105,21 +105,24 @@ Use the Bash commands on a Linux/WSL terminal for Azure shell scripts. They are
 not PowerShell scripts. Do not copy Bash `\` line continuations into PowerShell.
 Single-line Docker and Terraform examples work in either shell.
 
-## 4. Follow the sequence
+## 4. October 17: foundations sequence
 
 1. Prove Python behavior and validation.
 2. Build and run Docker; stop/remove the named manual container.
 3. Keep the image; let Terraform manage its own local container.
-4. Azure extension: review paid infrastructure, then configure a pipeline.
-5. Migrate that root's local state to Azure Blob without recreating resources.
-6. Import a separate existing resource into the isolated import exercise.
-7. Review DevSecOps controls; never interpret a green pipeline as proof of safety.
+4. Explain modules, state, plans and controlled changes using the
+   [Terraform guide](03-terraform-azure.md).
+5. Destroy only the local lab's managed resources, then remove its named image.
+6. Close with a short overview of how tests and an image feed delivery on
+   October 27. Do not configure cloud release identities or run a CodeQL
+   workshop as part of this session.
 
 Each guide says **which directory and terminal** to use. Saved plans and state
 are private operational data. The public PDF is a reading aid; copy executable
-code from repository files.
+code from repository files. Advanced CI/CD and DevSecOps slides in the existing
+pack are optional October 27 reference, not October 17 lab requirements.
 
-## 5. Returning for October 27
+## 5. October 27: advanced architecture, CI/CD and DevSecOps sequence
 
 Use your existing clone. Check local changes before updating from `main`; keep
 your own work and do not overwrite it to match a demo.
@@ -136,3 +139,25 @@ Before the advanced session:
 
 Do not keep paid resources running merely to retain continuity between dates.
 Source reuse and live-resource lifecycle are different responsibilities.
+
+During the session:
+
+1. Compare App Service and VM/Nginx responsibilities; review the Terraform
+   modules and paid-resource plan before provisioning.
+2. Review Azure Blob state migration, locking and resource import. Keep one
+   owner per state; do not import resources already owned by another root.
+3. Configure protected environments, federated identities and pipeline
+   variables using [the delivery guide](04-pipelines.md).
+4. Trace GitHub Actions and Azure DevOps stages and the immutable image digest.
+   Use only one orchestrator against the shared targets at a time.
+5. Complete [the DevSecOps/CodeQL workshop](05-devsecops-codeql.md): inspect
+   analysis jobs and alerts, review permissions, and distinguish existing
+   checks from additional policy gates.
+6. Review release evidence, approve a demo deployment, verify both targets,
+   and discuss failure handling and known-good-digest rollback.
+7. Identify missing production controls, then clean up resources in the
+   documented order before retiring their state storage.
+
+CodeQL remains active in the repository regardless of the teaching date.
+Moving its workshop to October 27 does not disable scans or automatically add
+an alerts-based deployment gate.
