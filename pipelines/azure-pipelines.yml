@@ -9,9 +9,9 @@ pr:
 
 parameters:
   - name: deploy
-    displayName: Build and deploy Azure demo (main only)
+    displayName: Continue to build and approved Azure deployment (main only)
     type: boolean
-    default: false
+    default: true
   - name: azureServiceConnection
     displayName: Workload identity federation service connection
     type: string
@@ -19,6 +19,8 @@ parameters:
 
 pool:
   vmImage: ubuntu-latest
+
+lockBehavior: sequential
 
 stages:
   - stage: Test
@@ -36,10 +38,19 @@ stages:
               cd launchpad-lab
               python -m unittest -v
             displayName: Test the Python app
+      - job: DeploymentScriptTests
+        steps:
+          - checkout: self
+            persistCredentials: false
+          - bash: |
+              set -euo pipefail
+              bash -n scripts/deploy-azure.sh scripts/deploy-vm.sh tests/test-deploy.sh
+              bash tests/test-deploy.sh
+            displayName: Test deployment scripts without Azure calls
 
   - stage: Build
     dependsOn: Test
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ${{ eq(parameters.deploy, true) }})
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'), ${{ eq(parameters.deploy, true) }})
     jobs:
       - job: BuildImage
         steps:
@@ -73,7 +84,7 @@ stages:
 
   - stage: Deploy
     dependsOn: Build
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ${{ eq(parameters.deploy, true) }})
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'), ${{ eq(parameters.deploy, true) }})
     variables:
       IMAGE_REF: $[ stageDependencies.Build.BuildImage.outputs['publishImage.imageRef'] ]
     jobs:

@@ -122,7 +122,7 @@ The provided workflow is **standalone scanning**, not a deployment security gate
 - A successful `Analyze (python)` or `Analyze (javascript-typescript)` job means analysis/upload succeeded. Those jobs can succeed **while alerts exist**.
 - Branch protection/rulesets can require those checks and the CI Python/Terraform checks before merging. That ensures execution, not absence of findings.
 - To block merges on findings, separately configure GitHub **code-scanning merge protection** where available, selecting tools and severity thresholds. Verify its behavior on a controlled test PR; do not assume requiring the workflow check implements it.
-- The manual Azure release workflow has its own test gate and environment approval, but does not query alerts or await CodeQL. Approvers should review the commit's CI, scanning status, and outstanding alerts. Requiring a separate alerts gate before **deployment** needs an explicit additional integration/policy.
+- Successful main-push CI calls the reusable Azure release workflow; manual release remains available. Both routes have a release test gate and externally configured environment approval, but do not query alerts or await CodeQL. Approvers should review the commit's CI, scanning status, and outstanding alerts. Requiring a separate alerts gate before **deployment** needs an explicit additional integration/policy.
 - Azure DevOps does not run this GitHub CodeQL workflow as part of its stages. GitHub scans the connected repository; that is not an automatic Azure DevOps release gate.
 
 ## What this demo covers — and does not
@@ -134,7 +134,7 @@ The provided workflow is **standalone scanning**, not a deployment security gate
 | Infrastructure syntax/schema | Terraform format/validate | safe networking, least privilege, cost limits, drift |
 | Cloud authentication | GitHub OIDC / Azure DevOps WIF, target managed identities | that every authorized workflow change is safe |
 | Release integrity | same ACR SHA-256 digest on both targets | signed provenance or an SBOM |
-| Release control | manual main-only release + external environment approvals | automatically blocking outstanding alerts |
+| Release control | successful main-push CI hands off to CD + external environment approvals; manual release retained | automatically blocking outstanding alerts |
 
 CodeQL is **not a universal misconfiguration scanner**. It does not replace Terraform policy checks, Docker image vulnerability scans, dependency auditing, secret scanning, or live configuration review. No image-CVE gate is included in these teaching pipelines; the image is built and pushed after tests. Discuss those tools during the October 27 workshop as deliberate additional work rather than claiming CodeQL already provides them.
 

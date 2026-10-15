@@ -76,6 +76,12 @@ are reference material for October 27, not requirements to cover on October 17.
 The session split changes the teaching order, **not** workflow triggers:
 repository CI and CodeQL scanning remain enabled before and between sessions.
 
+Successful pushes to `main` now hand off from CI to CD in both pipeline
+definitions. Configure the required environment approvals, federation and
+variables **before enabling these releases**; pull requests stay test-only.
+Use only one release orchestrator against the shared Azure targets.
+See the [delivery setup and execution order](docs/04-pipelines.md).
+
 ## Repository map
 
 ```text
@@ -83,8 +89,8 @@ launchpad-lab/       Python web app, tests, Dockerfile, Compose, local Docker Ia
 infra/azure/        Azure root module plus reusable web and vm child modules
 infra/import/       Isolated resource-group import exercise
 scripts/            Backend bootstrap and shared deployment scripts
-.github/workflows/  CI, CodeQL and manually approved GitHub Azure deployment
-pipelines/          Azure DevOps example
+.github/workflows/  CI-to-CD handoff, CodeQL and approval-gated Azure deployment
+pipelines/          Azure DevOps Test -> Build -> approval -> Deploy
 tests/              Offline deployment-script regression scenarios
 docs/               Participant PDF and public technical walkthroughs
 ```

@@ -40,7 +40,9 @@ GitHub Actions and Azure DevOps are **alternative release orchestrators** for th
 The VM's container listens on port 8000 but is published only on loopback. No public SSH is needed: Azure VM Run Command executes the guest deployment script as root. HTTP on the VM is a **demo shortcut**, not production transport security.
 
 ```text
-tests → build once → ACR launchpad:commit-run-attempt
+main push → successful CI → approved delivery
+                               ↓
+                  build once → ACR launchpad:commit-run-attempt
                        ↓ resolve sha256 digest
                 ┌──────┴───────┐
            App Service      Ubuntu VM
@@ -48,6 +50,19 @@ tests → build once → ACR launchpad:commit-run-attempt
 ```
 
 Do not run both orchestrators against the same targets at once. GitHub's concurrency lock does not lock Azure DevOps, and two different release digests can overwrite each other's deployments. Stop one pipeline before using the other.
+
+Both definitions now continue from successful `main` CI into CD automatically.
+Deployment still requires the **external environment approval** configured below.
+Pull requests remain validation-only. This approval-gated flow is continuous
+delivery; removing the human gate would make it fully automatic deployment.
+
+**Configure approval gates before publishing/enabling this wiring.** This change
+does not create remote environments, reviewers, branch checks or service
+connections. An environment
+name is not proof of protection: platforms can create an unprotected environment.
+Only one orchestrator should be enabled/approved against the shared targets.
+For CI-only rehearsals, run GitHub CI manually or queue Azure Pipelines with
+`deploy: false`; do not use an unprotected environment as a substitute for approval.
 
 ## Prerequisites: infrastructure first
 
@@ -124,12 +139,20 @@ editing this guide.
 
 ### Files and execution order
 
-- [CI workflow](../.github/workflows/ci.yml): push/PR to `main`, or manual. Runs Python 3.10/3.12 HTTP tests and Terraform 1.16.5 `fmt -check`, backend-disabled `init`, and `validate` for both Terraform roots. It does not sign in to Azure, plan, apply, or deploy.
-- [Deployment workflow](../.github/workflows/deploy.yml): **manual dispatch only**, `main` only. First runs the Python 3.12 tests; then `release` waits for the `azure-demo` environment approval.
-- `azure/login` exchanges a GitHub OIDC token for short-lived Azure credentials. `id-token: write` is granted only to the release job.
+- [CI workflow](../.github/workflows/ci.yml): push/PR to `main`, or manual. Runs offline deployment regressions, Python 3.10/3.12 HTTP tests and Terraform 1.16.5 `fmt -check`, backend-disabled `init`, and `validate` for both Terraform roots. After **all three validation jobs/matrices succeed**, a `push` to `main` calls the reusable deployment workflow. PRs and manual CI runs do not call it. Terraform CI does not plan, apply or import resources.
+- [Deployment workflow](../.github/workflows/deploy.yml): supports `workflow_call` from CI and retains manual dispatch on `main`. It retests the same commit with Python 3.12; then `release` waits for the configured `azure-demo` environment approval before signing in, building/pushing and deploying.
+- `azure/login` exchanges a GitHub OIDC token for short-lived Azure credentials. The reusable-workflow caller permits `id-token: write`; inside that workflow, only `release` requests it, not the test job. There is no client-secret handoff.
 - The tag combines full commit SHA, GitHub run ID, and run attempt. After push, `az acr repository show` returns the digest. The job writes `IMAGE_REF=registry.azurecr.io/launchpad@sha256:…` to `$GITHUB_ENV`, then calls the shared script.
 
-Open **Actions → Deploy Azure demo → Run workflow → main**, review the tested commit and permissions, approve the environment, and follow the release logs. Pushes and pull requests never deploy. This manual workflow retests the checked-out commit but does not wait for CodeQL; see the next lesson for scan/gate distinctions.
+After a push to `main`, open **Actions → CI → Approved Azure delivery**,
+review the tested commit and permissions, approve the pending environment
+deployment, and follow the nested release logs. A failed/cancelled CI dependency
+prevents the automatic handoff. The reusable workflow uses the caller's same
+commit, not a fresh checkout of whichever commit is newest at approval time.
+For a deliberate manual release, **Actions → Deploy Azure demo → Run workflow
+→ main** remains available; it retests that commit but bypasses the full CI
+dependency graph. Neither route waits for CodeQL or queries its alerts; see the
+next lesson for scan/gate distinctions.
 
 ## Azure DevOps setup
 
@@ -140,7 +163,7 @@ Open **Actions → Deploy Azure demo → Run workflow → main**, review the tes
    - Grant the connection identity the RG/ACR roles above. Authorize only this pipeline; do not select grant access to all pipelines.
 3. Under **Pipelines → Environments**, create `azure-demo`, and configure an **Approvals and checks** approval with a reviewer. Configure branch control to allow `refs/heads/main`. Add an exclusive lock if you permit multiple runs; queue/review releases deliberately.
 4. Set these pipeline UI variables: `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `ACR_NAME`, `AZURE_WEB_APP_NAME`, `AZURE_VM_NAME`. They are non-secret configuration. Authentication belongs to the federated service connection. This pipeline always queries the VM's actual public IP.
-5. Run the pipeline on `main` with parameter `deploy: true`. The default `false` runs tests only, including on ordinary CI pushes/PRs.
+5. Once the environment checks, authorized connection and variables are ready, enable the pipeline's `main` trigger. `deploy` now defaults to `true`: successful main CI automatically builds/pushes, then waits for environment approval before deployment. For a test-only manual run, set `deploy: false`. PRs and non-main runs cannot build/publish or deploy, even if `deploy` is true.
 
 The stages are **Test → Build → Deploy**. `AzureCLI@2` authenticates through the WIF service connection, without exposing service-principal tokens to the script. Build pushes one image and emits:
 
@@ -154,9 +177,20 @@ The named step `publishImage` in job `BuildImage` exports that value. Deploy rea
 IMAGE_REF: $[ stageDependencies.Build.BuildImage.outputs['publishImage.imageRef'] ]
 ```
 
-This is a **cross-stage output**, not a local shell variable or an artifact guessed from `latest`. The deployment job waits for `azure-demo` approval, checks out the same source version, and invokes `scripts/deploy-azure.sh` via `AzureCLI@2`. Both Build and Deploy require `main` and `deploy: true`; PR code cannot deploy.
+This is a **cross-stage output**, not a local shell variable or an artifact guessed from `latest`. The deployment job waits for configured `azure-demo` approval, checks out the same source version, and invokes `scripts/deploy-azure.sh` via `AzureCLI@2`. Both Build and Deploy require successful prerequisites, `main`, a non-PR build reason and `deploy: true`; PR code cannot deploy. Test runs Python and offline deployment-script regressions. A failure in either job prevents Build.
 
-YAML `pr` triggers apply when the repository provider supports them (including GitHub). For Azure Repos Git, configure a branch-policy build-validation rule instead. Azure DevOps tests Python 3.12; the GitHub CI workflow provides the 3.10/3.12 matrix and Terraform checks.
+GitHub's approval precedes its combined image-build/deploy job. Azure Pipelines
+builds and pushes first, so its approver can inspect the exported digest before
+Deploy. Rejected approvals prevent target changes; Azure's image may already
+exist in ACR. Neither flow provisions infrastructure or automatically rolls
+back a partially completed two-target release.
+
+Configure an **exclusive lock** check on the Azure DevOps environment.
+`lockBehavior: sequential` makes that check serialize approved releases; the
+YAML setting alone does not create the lock. This still does not lock GitHub's
+separate deployment queue. Never approve competing releases from both systems.
+
+YAML `pr` triggers apply when the repository provider supports them (including GitHub). For Azure Repos Git, configure a branch-policy build-validation rule instead. Azure DevOps tests Python 3.12 and the shared deployment regressions; GitHub CI additionally provides the 3.10/3.12 matrix and Terraform checks.
 
 ## Shared scripts: exact manual interface
 
