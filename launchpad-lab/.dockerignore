@@ -3,6 +3,10 @@ __pycache__/
 *.pyc
 .git/
 .env
+.env-local
+.env-local.example
 terraform/
 test_app.py
+test_ai.py
+manage_agent.py
 README.txt

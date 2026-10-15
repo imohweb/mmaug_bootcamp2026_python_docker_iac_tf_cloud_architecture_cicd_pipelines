@@ -23,6 +23,13 @@ module "web" {
   sku                 = var.app_service_sku
   registry_url        = "https://${azurerm_container_registry.app.login_server}"
   image_name          = "launchpad:${var.image_tag}"
+  ai_settings = var.enable_foundry ? {
+    FOUNDRY_PROJECT_ENDPOINT = local.foundry_project_endpoint
+    FOUNDRY_AGENT_NAME       = var.foundry_agent_name
+    AZURE_OPENAI_ENDPOINT    = local.openai_endpoint
+    AZURE_OPENAI_DEPLOYMENT  = var.model_deployment_name
+    AZURE_OPENAI_API_VERSION = "2024-10-21"
+  } : {}
 }
 
 module "vm" {

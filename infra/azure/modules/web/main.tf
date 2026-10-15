@@ -35,12 +35,15 @@ resource "azurerm_linux_web_app" "app" {
       docker_registry_url = var.registry_url
     }
   }
-  app_settings = {
+  app_settings = merge({
     WEBSITES_PORT = "8000"
     APP_MESSAGE   = "Hello from Azure App Service!"
-  }
+  }, var.ai_settings)
   lifecycle {
     # Pipelines own image releases; Terraform owns the surrounding infrastructure.
-    ignore_changes = [site_config[0].application_stack[0].docker_image_name]
+    ignore_changes = [
+      site_config[0].application_stack[0].docker_image_name,
+      app_settings["AI_DEMO_API_TOKEN"],
+    ]
   }
 }

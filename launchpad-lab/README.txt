@@ -4,7 +4,9 @@ OCTOBER 17: LOCAL LAB FIRST. Python, Docker and Terraform foundations.
 OCTOBER 27: Azure architecture, advanced CI/CD and DevSecOps in ../docs.
 Detailed pipeline configuration and the CodeQL workshop are not October 17 labs.
 This Flask API uses Gunicorn in Docker. app.py's local server is development-only.
-No AI model, user authentication or database is included.
+Optional Foundry agent/Azure OpenAI routes are described in ../docs/06-foundry-demo.md.
+They are disabled without configuration and a private demo bearer token.
+No production user authentication or database is included.
 Required: Python 3.10+, Docker Engine or Docker Desktop (running, Linux
 containers), Terraform 1.5+ but below 2.0, curl, and internet for first pulls/init.
 Docker Desktop licensing may apply. Docker socket access is privileged.
@@ -26,7 +28,8 @@ server runs in the foreground. Bash/zsh commands are shown first.
    curl -i "http://127.0.0.1:8000/sum?values=5,nope,15"
    Expected: {"status": "ok"}, then {"total": 30, "average": 10.0},
    then HTTP 400 and a JSON error. Stop the Python server with Ctrl+C.
-   The test suite has 11 methods. Browser interface: http://127.0.0.1:8000/ui
+   The suite includes 11 foundation methods plus offline AI regression tests.
+   Browser interface: http://127.0.0.1:8000/ui
 
 2. DOCKER
    docker version

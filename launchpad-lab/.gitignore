@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .env
+.env-local
 terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.*

@@ -8,6 +8,7 @@ RUN groupadd --gid 10001 app \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=app:app app.py .
+COPY --chown=app:app ai_demo.py .
 COPY --chown=app:app templates/ templates/
 COPY --chown=app:app static/ static/
 USER app

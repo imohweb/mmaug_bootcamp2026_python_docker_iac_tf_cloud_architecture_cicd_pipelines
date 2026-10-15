@@ -67,11 +67,51 @@ For this public repository, GitHub CodeQL/code scanning is available without the
 
 ## Enable it and find the result
 
-1. Open **Settings → Code security** (or **Code security and analysis**, depending on UI).
-2. Use **advanced setup** / the checked-in workflow. If default setup is already enabled, disable it before using the advanced workflow to avoid duplicate/conflicting scans.
-3. Open **Actions → CodeQL**, run the workflow on `main`, and inspect both language jobs.
-4. Open **Security → Code scanning** to inspect alerts. Review source locations, the data-flow path when provided, severity, and the suggested explanation.
-5. Fix a real finding in a branch, add a regression test if appropriate, open a PR, and verify the alert is resolved in a new scan. Dismiss false positives only with a recorded reason.
+Instructor walkthrough (repository administrator or an appropriately delegated
+security role; button names vary with GitHub UI and plan):
+
+1. Open the **repository**, not account settings. Confirm that GitHub Actions is
+   permitted by repository/organization policy. Check CodeQL availability:
+   public repositories are supported; private repositories need the applicable
+   GitHub Code Security entitlement.
+2. Open **Settings → Code security** (sometimes **Code security and analysis**).
+   Find **Code scanning → CodeQL analysis**. Organization-managed settings may
+   require an organization administrator.
+3. Explain the choice: **Default setup** lets GitHub manage scanning;
+   **Advanced setup** uses a checked-in workflow. This workshop uses **advanced
+   setup**, because we want to teach the actual YAML, permissions and matrix.
+4. If default setup is already enabled, disable that setup before using this
+   advanced workflow. Do not run competing default and advanced setups for the
+   same repository.
+5. On a new repository, choose **Set up → Advanced** (or **Security → Code
+   scanning → Set up code scanning → CodeQL**). Save the complete supplied
+   `.github/workflows/codeql.yml`, using a PR if required. In this lab repository
+   the file already exists: review it rather than creating a duplicate.
+6. Ensure the workflow is merged onto the **default branch**. It targets
+   `main`; adjust the push/PR branch filters if your repository uses another
+   name. Scheduled scans run from the default branch. Verify the Python and
+   JavaScript/TypeScript matrix matches the repository's actual source.
+7. Open **Actions → CodeQL → Run workflow**, select `main`, and run it.
+   Manual dispatch appears only when the dispatch-enabled workflow exists on
+   the default branch and your permissions allow it.
+8. Expand **Analyze (python)** and **Analyze (javascript-typescript)**.
+   Inspect checkout, initialization and analysis/upload logs. A permissions,
+   policy or extraction failure is not a clean security scan.
+9. Open **Security → Code scanning** and filter by branch/tool. Inspect an
+   alert's source, data-flow path when available, severity and remediation.
+   If there are no alerts, explain that this means no findings in this scan's
+   scope, not proof of a vulnerability-free application.
+10. Separately configure **Settings → Rules → Rulesets** or branch protection
+    for required checks. If supported, enable code-scanning merge protection
+    with explicit tool/severity thresholds. Requiring a successful scan alone
+    does not require zero alerts and does not gate Azure deployment.
+11. Fix a real finding in a branch, add a regression test when appropriate,
+    open a PR and verify resolution in a new scan. Record the rationale for
+    dismissals. Never add exploitable sample code just to force an alert.
+
+If **Run workflow** or results are missing, check default-branch placement,
+Actions policy, repository visibility/entitlement and job upload permissions.
+Do not grant cloud credentials or switch to privileged untrusted PR execution.
 
 No alerts means **no alerts from this scan**, not “no vulnerabilities.” This small demo is not intentionally seeded with unsafe code; a successful zero-alert result is expected to be possible. Do not add a public exploitable endpoint just to make a screenshot.
 

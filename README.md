@@ -49,6 +49,9 @@ Carry forward the tested `launchpad-lab` app and its container contract:
    verify both public targets, and discuss partial failures and deliberate
    rollback using a known-good digest.
 6. Review missing production controls and cleanup/cost responsibilities.
+7. Optionally demonstrate [Foundry agents and Azure OpenAI](docs/06-foundry-demo.md):
+   provision the opt-in AI extension, compare both SDK calls, build locally with
+   Docker Desktop, push to ACR and run the image in App Service using managed identity.
 
 These are learning paths through the existing materials, not a claim that
 additional production controls are already implemented. The current VM remains
@@ -65,6 +68,7 @@ automatic alerts-based release gate.
 | [Terraform: modules, local state, Azure Blob migration and import](docs/03-terraform-azure.md) | Local workflow and IaC concepts | Azure architecture and collaborative state workflow |
 | [GitHub Actions and Azure DevOps delivery](docs/04-pipelines.md) | Optional reference, not a configuration lab | Advanced delivery workshop |
 | [DevSecOps and CodeQL setup](docs/05-devsecops-codeql.md) | Reserved for the next session | DevSecOps workshop |
+| [Foundry agent, Azure OpenAI and local Docker-to-ACR demo](docs/06-foundry-demo.md) | Optional instructor reference | Paid opt-in AI application extension |
 | [17 October participant slide PDF](docs/MMAUG_Python_docker_terraform_Fundamentals_Participant.pdf) | Foundations slides | Existing advanced slides are optional reference |
 
 The existing slide pack remains intact. Its detailed CI/CD and DevSecOps slides
@@ -91,6 +95,11 @@ in App Service, and on the Nginx-backed Linux VM.
 
 The container uses Flask and Gunicorn instead of exposing a teaching HTTP
 server to Azure. Python's local `app.run` is for development only.
+Optional `POST /ai/model` and `POST /ai/agent` routes require a private demo
+bearer token and configured Azure access. The local-only `.env-local` has
+placeholders; commit only `.env-local.example`. AI resources remain disabled
+in Terraform until `enable_foundry = true`. The unchanged local routes and
+offline tests do not need an Azure subscription.
 The VM exposes **HTTP only** for a short non-sensitive demo; add a domain,
 TLS and proper access controls before real use. No public SSH ingress is opened.
 

@@ -141,6 +141,11 @@ This ownership exception is intentional, not a generic `ignore_changes = all`.
 
 ## 4. Initiate the Azure root locally
 
+For the optional Foundry resource/project/model/agent extension, see the
+[AI demo](06-foundry-demo.md). `enable_foundry` defaults to false, preserving
+the original non-AI infrastructure. The extension retains this root's VM and
+adds paid resources, SDK provisioning prerequisites and scoped runtime RBAC.
+
 Prerequisites: an approved subscription and cost budget; capacity/quota in your
 chosen region; permission to create resources plus assign runtime roles
 (Contributor alone cannot assign roles; Role Based Access Control Administrator

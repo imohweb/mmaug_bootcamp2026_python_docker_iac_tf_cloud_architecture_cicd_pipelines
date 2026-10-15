@@ -47,7 +47,9 @@ python -m unittest -v
 python app.py
 ```
 
-Expected test count: **11 methods**, with more input cases covered by subtests.
+Expected test count: **27 methods**: 11 foundation tests plus 16 offline AI
+request-guard, mocked SDK and agent-lifecycle tests. Additional input cases use
+subtests. No Azure credentials or model tokens are needed to run the tests.
 The development server occupies this terminal; use a second terminal:
 
 ```bash

@@ -1,8 +1,10 @@
 # Python: every Python file explained
 
-There are exactly two participant Python files: `app.py` and `test_app.py` in
-`launchpad-lab`. Presentation-generation scripts are private presenter tooling,
-not participant application code.
+The foundation uses `app.py` and `test_app.py` in `launchpad-lab`. The optional
+[AI demo](06-foundry-demo.md) adds `ai_demo.py` (SDK calls), `manage_agent.py`
+(Terraform's agent lifecycle bridge), and `test_ai.py` (offline mocked SDK,
+access-guard and lifecycle tests). Presentation-generation scripts are private
+presenter tooling, not participant application code.
 
 ## Before the web app: beginner building blocks
 
@@ -65,6 +67,12 @@ do not convert failure into a fake successful zero result.
 - `request`: accesses the current HTTP request through Flask's request context.
 - `app = Flask(__name__)`: creates the WSGI application, using the module identity
   to find template/static resources. This `app` is exported for Gunicorn.
+- `load_dotenv`: loads the adjacent ignored `.env-local` without overriding
+  process settings. AI clients are instantiated only when a protected AI route
+  is invoked; ordinary local requests require no Azure credentials.
+- `secrets.compare_digest`: compares the private demo bearer token. AI requests
+  require valid JSON, bounded prompts and a configured token. See the AI guide
+  for the complete request and error contract.
 
 ### summarize(values)
 

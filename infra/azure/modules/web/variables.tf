@@ -16,3 +16,8 @@ variable "registry_url" {
 variable "image_name" {
   type = string
 }
+variable "ai_settings" {
+  type        = map(string)
+  default     = {}
+  description = "Non-secret Foundry and model configuration."
+}

@@ -24,8 +24,9 @@ Docker socket/group access is privileged; do not give it to untrusted code.
 | `ENV ...` | Disable bytecode files, flush logs, document default port 8000. |
 | `RUN groupadd ... && useradd ...` | Build-time creation of uid/gid 10001; failure stops the build. |
 | `COPY requirements.txt .` | Copy the dependency manifest before frequently changing source for caching. |
-| `RUN pip install --no-cache-dir -r requirements.txt` | Install declared Flask/Gunicorn dependencies into the image, not the host. |
+| `RUN pip install --no-cache-dir -r requirements.txt` | Install Flask/Gunicorn, Foundry/OpenAI SDKs, identity and dotenv dependencies into the image, not the host. |
 | `COPY --chown=app:app app.py .` | Package source with intended ownership. |
+| `COPY --chown=app:app ai_demo.py .` | Package the optional model/agent SDK helpers; no credentials are copied. |
 | `COPY ... templates/ ...` and `COPY ... static/ ...` | Package browser assets required by `/ui`. |
 | `USER app` | Run the application as non-root. |
 | `EXPOSE 8000` | Document internal port. This does **not** publish it on the host. |
@@ -38,8 +39,12 @@ can be cached; changing a layer invalidates following layers. A multi-stage
 build separates build tools from runtime output when that actually helps; our
 small app does not need an artificial second stage.
 
-`.dockerignore` excludes local venvs, caches, Git metadata, `.env`, tests and
+`.dockerignore` excludes local venvs, caches, Git metadata, `.env`, `.env-local`, tests and
 Terraform artifacts from the build context. It is not a universal secret scanner.
+
+The [optional AI demo](06-foundry-demo.md) provides the complete local Docker
+Desktop build/run, ACR login/tag/push, immutable image reference and
+managed-identity App Service deployment sequence.
 
 ## Build and verify
 
