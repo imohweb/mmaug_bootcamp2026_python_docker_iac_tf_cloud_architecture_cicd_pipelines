@@ -83,7 +83,8 @@ docker() {
 }
 systemctl() { :; }
 journalctl() { :; }
-export -f az curl sleep timeout docker systemctl journalctl
+cloud-init() { [[ "$MOCK_MODE" != bootstrap-failure ]]; }
+export -f az curl sleep timeout docker systemctl journalctl cloud-init
 
 expect_pass() {
   local output
@@ -136,6 +137,18 @@ export AZURE_RESOURCE_GROUP=demo-rg
 
 # Root is the only guest prerequisite bypassed, in-memory; files are unchanged.
 guest_script=$(sed 's/\[\[ "$EUID" -eq 0 \]\]/true/' scripts/deploy-vm.sh)
+export MOCK_MODE=bootstrap-failure
+if output=$(bash -s -- "$IMAGE_REF" "$ACR_NAME" <<< "$guest_script" 2>&1); then
+  echo 'FAIL: guest bootstrap failure unexpectedly succeeded' >&2
+  exit 1
+elif [[ "$output" != *"VM cloud-init did not complete successfully"* ]]; then
+  printf 'FAIL: guest bootstrap failure diagnostic missing\n%s\n' "$output" >&2
+  exit 1
+else
+  echo 'PASS: guest bootstrap failure blocks deployment'
+  passed=$((passed + 1))
+fi
+export MOCK_MODE=success
 if bash -s -- "$IMAGE_REF" "$ACR_NAME" <<< "$guest_script" |
   grep -Fxq "LAUNCHPAD_DEPLOY_OK_${IMAGE_REF##*:}"; then
   echo 'PASS: guest pull/run/nginx health/success marker'

@@ -13,6 +13,13 @@ acr_name=${2:?Expected ACR name as argument 2}
 registry_name=$(printf '%s' "$acr_name" | tr '[:upper:]' '[:lower:]')
 [[ "${image_ref%%.*}" == "$registry_name" ]] || { echo "Image registry does not match ACR name" >&2; exit 1; }
 [[ "$EUID" -eq 0 ]] || { echo "Run this script through Azure VM Run Command (root)." >&2; exit 1; }
+for tool in cloud-init timeout; do
+  command -v "$tool" >/dev/null || { echo "Missing VM bootstrap prerequisite: $tool" >&2; exit 1; }
+done
+if ! timeout 300s cloud-init status --wait; then
+  echo "VM cloud-init did not complete successfully within 300 seconds; inspect /var/log/cloud-init-output.log." >&2
+  exit 1
+fi
 for tool in az docker curl; do
   command -v "$tool" >/dev/null || { echo "Missing VM prerequisite: $tool (check cloud-init)." >&2; exit 1; }
 done

@@ -160,6 +160,11 @@ YAML `pr` triggers apply when the repository provider supports them (including G
 
 ## Shared scripts: exact manual interface
 
+The VM script waits up to 300 seconds for `cloud-init status --wait` before
+checking installed tools and starting the release. A failed or timed-out
+bootstrap stops deployment with an explicit diagnostic. Inspect cloud-init
+logs rather than repeatedly deploying over an incomplete machine.
+
 [scripts/deploy-azure.sh](../scripts/deploy-azure.sh) runs on a **Linux runner** with Bash, Azure CLI, `curl`, `jq`, and GNU `timeout`. Authenticate beforehand (`az login` interactively for local manual use, OIDC/WIF in pipelines). It accepts **environment variables**, not positional arguments:
 
 | Name | Required? | Format |

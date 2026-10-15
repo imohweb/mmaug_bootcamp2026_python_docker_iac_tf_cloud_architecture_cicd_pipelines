@@ -81,7 +81,13 @@ class HttpTests(unittest.TestCase):
         with urlopen(self.base_url + "/ui", timeout=3) as response:
             self.assertEqual(response.status, 200)
             self.assertIn("text/html", response.headers["Content-Type"])
-            self.assertIn(b"MMAUG Launchpad", response.read())
+            page = response.read()
+            self.assertIn(b"<title>MMAUG Bootcamp 2026 Sessions Launchpad by Imoh Etuk</title>", page)
+            self.assertIn(b"covers the October 17 and 27, 2026 sessions", page)
+            self.assertIn(b"Microsoft Foundry agent and Azure OpenAI model integration", page)
+            self.assertIn(b"private bearer token", page)
+            self.assertIn(b"No production user authentication or database", page)
+            self.assertNotIn(b"no authentication, database, or AI model", page)
 
     def test_oversized_input(self):
         status, payload = self.request("/sum?values=" + "1" * 121)

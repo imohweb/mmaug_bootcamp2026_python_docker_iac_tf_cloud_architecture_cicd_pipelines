@@ -69,9 +69,9 @@ automatic alerts-based release gate.
 | [GitHub Actions and Azure DevOps delivery](docs/04-pipelines.md) | Optional reference, not a configuration lab | Advanced delivery workshop |
 | [DevSecOps and CodeQL setup](docs/05-devsecops-codeql.md) | Reserved for the next session | DevSecOps workshop |
 | [Foundry agent, Azure OpenAI and local Docker-to-ACR demo](docs/06-foundry-demo.md) | Optional instructor reference | Paid opt-in AI application extension |
-| [17 October participant slide PDF](docs/MMAUG_Python_docker_terraform_Fundamentals_Participant.pdf) | Foundations slides | Existing advanced slides are optional reference |
+| [Participant slide PDF: October 17 and 27](docs/MMAUG_Python_docker_terraform_Fundamentals_Participant.pdf) | Foundations slides | Advanced delivery, cloud-init, CodeQL and optional AI walkthroughs |
 
-The existing slide pack remains intact. Its detailed CI/CD and DevSecOps slides
+The shared slide pack includes both sessions. Its detailed CI/CD and DevSecOps slides
 are reference material for October 27, not requirements to cover on October 17.
 The session split changes the teaching order, **not** workflow triggers:
 repository CI and CodeQL scanning remain enabled before and between sessions.
@@ -114,9 +114,9 @@ extensions, not prerequisites for the local labs.
 
 Application code, tests, example configuration, provider lock files, workflows
 and participant documentation belong here. Never commit `.env`, keys, tokens,
-actual `terraform.tfvars`, backend state, plan files, provider downloads,
-presenter PowerPoint files or speaker scripts. Inspect `git status` before
-committing. This repository deliberately has no cloud credentials.
+actual `terraform.tfvars`, backend state, plan files or provider downloads.
+Keep `.env-local` local and commit only `.env-local.example`. Inspect `git status`
+before committing. This repository deliberately has no cloud credentials.
 
 ## Validation and limitations
 

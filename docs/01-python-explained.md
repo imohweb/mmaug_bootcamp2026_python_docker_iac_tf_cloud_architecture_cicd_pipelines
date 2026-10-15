@@ -3,8 +3,7 @@
 The foundation uses `app.py` and `test_app.py` in `launchpad-lab`. The optional
 [AI demo](06-foundry-demo.md) adds `ai_demo.py` (SDK calls), `manage_agent.py`
 (Terraform's agent lifecycle bridge), and `test_ai.py` (offline mocked SDK,
-access-guard and lifecycle tests). Presentation-generation scripts are private
-presenter tooling, not participant application code.
+access-guard and lifecycle tests).
 
 ## Before the web app: beginner building blocks
 
@@ -178,7 +177,9 @@ Inheritance gives the class assertions and unittest discovery.
 - `test_bad_input`: uses subtests for missing, empty, non-numeric, short, long
   and duplicate parameters, requiring status 400 and an `error` field.
 - `test_missing_route`: checks explicit 404 JSON.
-- `test_home_page`: checks `/ui` gives HTML and contains the page title.
+- `test_home_page`: checks `/ui` gives HTML with the full bootcamp title,
+  both session dates, the optional Foundry/OpenAI description and the demo
+  authentication limitations.
 - `test_oversized_input`: proves the 120-character bound produces HTTP 400.
 - The final `__main__` guard runs `unittest.main()` when this test file is
   executed directly. `python -m unittest -v` discovers the same methods.

@@ -3,7 +3,7 @@
 This public repository supports both the **17 October 2026** fundamentals
 session and the **27 October 2026** session, **Advanced Cloud Architecture &
 DevOps CI/CD Pipeline Process**. Both use the same application, infrastructure
-examples and pipeline code. Presenter notes are intentionally not included.
+examples and pipeline code.
 
 For October 17, complete local Python, Docker and Terraform. Detailed pipeline
 and DevSecOps exercises are reserved for October 27. On that date, refresh the
@@ -21,8 +21,7 @@ cd launchpad-lab
 ```
 
 If using the supplied local folder, open a terminal inside `launchpad-lab`.
-Paths in examples are relative to the cloned repository, not the presenter's
-personal computer.
+Paths in examples are relative to the cloned repository.
 
 If you cloned before the repository was renamed, keep your existing folder.
 From that clone's root, update its remote:
@@ -135,6 +134,8 @@ Before the advanced session:
 - Review [Azure architecture, modules and state](03-terraform-azure.md).
 - Read [pipeline prerequisites and identity configuration](04-pipelines.md).
 - Review [what CodeQL does and does not enforce](05-devsecops-codeql.md).
+- For the optional AI demo, read [Foundry, Azure OpenAI and Docker-to-ACR](06-foundry-demo.md);
+  review model availability, quota, costs and local configuration before enabling it.
 - Run `bash tests/test-deploy.sh` from the repository root for offline checks.
 - For live Azure exercises, confirm the subscription, resource ownership,
   approvals, capacity and cost budget again.
@@ -159,6 +160,12 @@ During the session:
    and discuss failure handling and known-good-digest rollback.
 7. Identify missing production controls, then clean up resources in the
    documented order before retiring their state storage.
+
+For the optional AI extension, compare direct model and deployed agent calls,
+build/run locally with Docker Desktop, then push to ACR and verify the same
+image in App Service using the [complete AI demo sequence](06-foundry-demo.md).
+The VM is a non-AI hosting comparison target. Terraform creates it regardless
+of whether Foundry is enabled.
 
 CodeQL remains active in the repository regardless of the teaching date.
 Moving its workshop to October 27 does not disable scans or automatically add

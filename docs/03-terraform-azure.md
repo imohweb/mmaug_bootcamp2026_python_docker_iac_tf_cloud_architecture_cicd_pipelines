@@ -55,6 +55,12 @@ $env:DOCKER_HOST = docker context inspect --format '{{.Endpoints.docker.Host}}'
 - `.terraform.lock.hcl`: selected provider versions/checksums; commit it.
 - `.terraform/`: downloaded working data; do not commit it.
 
+The `.terraform/modules/modules.json` file is generated module-location metadata,
+not a file to edit. Provider plugins and backend initialization metadata also
+live under `.terraform/`; keep that directory private and Git-ignored.
+The dependency lock file `.terraform.lock.hcl` is different and should be
+committed. Neither file replaces Terraform state.
+
 ```bash
 terraform plan -var="host_port=8081" -out=change.tfplan
 # Expect container replacement; read the actual plan.
@@ -105,6 +111,11 @@ In this repository:
 - Child `modules/vm`: network, public IP, NSG, NIC, VM and cloud-init.
 - Root outputs provide target names to pipeline configuration.
 
+The optional `foundry.tf` belongs to the same Azure **root module**; its filename
+groups resources but does not create a child module. It connects account,
+project, model, agent and access assignments to the shared web identity.
+The VM module is unconditional: disabling Foundry does not disable the VM.
+
 Modules are organizational/reuse boundaries, not automatic separate state
 files. These two children share the Azure root's state. The Docker root and
 import root use separate states.
@@ -135,9 +146,11 @@ for non-sensitive teaching traffic; use a domain/TLS/private controls before
 real workloads. Cloud-init is first-boot configuration, not a deployment pipeline.
 
 Terraform owns infrastructure; pipelines own image releases. The web module
-ignores only `docker_image_name` changes to prevent a later Terraform apply
-from rolling back a pipeline release. Other infrastructure drift remains visible.
-This ownership exception is intentional, not a generic `ignore_changes = all`.
+ignores `docker_image_name` changes to prevent a later Terraform apply
+from rolling back a pipeline release. It also leaves `AI_DEMO_API_TOKEN` under
+external management, as described in the AI guide. Other infrastructure and
+non-secret AI-setting drift remains visible. These ownership exceptions are
+intentional, not a generic `ignore_changes = all`.
 
 ## 4. Initiate the Azure root locally
 

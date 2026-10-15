@@ -1,4 +1,4 @@
-MMAUG | 17 October 2026 | Python -> Docker -> Terraform
+MMAUG | 17 and 27 October 2026 | Python -> Docker -> Terraform -> Azure
 =====================================================
 OCTOBER 17: LOCAL LAB FIRST. Python, Docker and Terraform foundations.
 OCTOBER 27: Azure architecture, advanced CI/CD and DevSecOps in ../docs.
@@ -28,7 +28,7 @@ server runs in the foreground. Bash/zsh commands are shown first.
    curl -i "http://127.0.0.1:8000/sum?values=5,nope,15"
    Expected: {"status": "ok"}, then {"total": 30, "average": 10.0},
    then HTTP 400 and a JSON error. Stop the Python server with Ctrl+C.
-   The suite includes 11 foundation methods plus offline AI regression tests.
+   The suite has 27 methods: 11 foundation plus 16 offline AI regression tests.
    Browser interface: http://127.0.0.1:8000/ui
 
 2. DOCKER
@@ -134,9 +134,10 @@ SOURCE REFERENCES
    OCTOBER 27 WORKSHOPS:
    See ../docs/04-pipelines.md for advanced delivery, approvals and verification.
    See ../docs/05-devsecops-codeql.md for DevSecOps and source-scanning policy.
+   See ../docs/06-foundry-demo.md for model/agent SDKs and Docker-to-ACR deployment.
    Repository scans remain enabled; these dates govern teaching, not triggers.
    https://docs.python.org/3/tutorial/
-   https://docs.python.org/3/library/http.server.html
+   https://flask.palletsprojects.com/
    https://docs.docker.com/get-started/
    https://docs.docker.com/reference/dockerfile/
    https://developer.hashicorp.com/terraform/tutorials/docker-get-started
