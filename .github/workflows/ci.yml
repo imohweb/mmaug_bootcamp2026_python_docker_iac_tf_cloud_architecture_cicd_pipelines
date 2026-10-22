@@ -1,3 +1,11 @@
+# GITHUB SETUP: CI checks need no custom environment variables or secrets.
+# Automatic main deployment calls deploy.yml and uses GitHub environment dev.
+# dev VARIABLES: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+# AZURE_RESOURCE_GROUP=RG-MMAUG-Bootcamp, ACR_NAME,
+# BACKEND_WEB_APP_NAME, FRONTEND_WEB_APP_NAME.
+# dev SECRET: SPECIALIST_API_TOKEN (random, 32+ characters).
+# Infrastructure-only variables are listed at the top of infra.yml.
+# Configure OIDC trust, required reviewers and main branch restrictions externally.
 name: CI
 
 on:
@@ -18,15 +26,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: bash -n scripts/deploy-azure.sh scripts/deploy-vm.sh tests/test-deploy.sh
+      - run: bash -n scripts/deploy-azure.sh scripts/bootstrap-state.sh tests/test-deploy.sh
       - run: bash tests/test-deploy.sh
+      - run: bash tests/test-bootstrap-state.sh
 
-  python:
-    name: Python ${{ matrix.python }}
+  backend:
+    name: Backend (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python: ['3.10', '3.12']
+    defaults:
+      run:
+        working-directory: support-agent/backend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,17 +46,66 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -r launchpad-lab/requirements.txt
-      - name: Run HTTP tests
-        working-directory: launchpad-lab
+      - run: pip install -r requirements.txt
+      - name: Run API, agent and storage tests (offline)
         run: python -m unittest -v
+
+  frontend:
+    name: Frontend (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: support-agent/frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: support-agent/frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: node --test server.test.mjs
+
+  container:
+    name: Container image build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build -t mmaug-support-agent:ci support-agent
+      - run: docker build --target backend -t mmaug-support-agent-backend:ci support-agent
+      - run: docker build --target frontend -t mmaug-support-agent-frontend:ci support-agent
+      - name: Smoke test the container
+        run: |
+          set -euo pipefail
+          docker network create support-ci
+          docker run -d --name backend --network support-ci mmaug-support-agent-backend:ci
+          docker run -d --name support-ci --network support-ci -p 127.0.0.1:8000:8000 \
+            -e BACKEND_ORIGIN=http://backend:8000 mmaug-support-agent-frontend:ci
+          for attempt in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8000/health && break
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8000/api/config | jq -e '.teams | length == 4'
+          curl -fsS http://127.0.0.1:8000/ | grep -q '<div id="root">'
+      - if: always()
+        run: |
+          docker logs support-ci || true
+          docker logs backend || true
+          docker rm -f support-ci backend || true
+          docker network rm support-ci || true
 
   terraform:
     name: Terraform (${{ matrix.directory }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        directory: [launchpad-lab/terraform, infra/azure]
+        directory: [support-agent/terraform, infra/azure]
     defaults:
       run:
         working-directory: ${{ matrix.directory }}
@@ -61,9 +122,10 @@ jobs:
 
   deploy:
     name: Approved Azure delivery
-    needs: [deployment-scripts, python, terraform]
+    needs: [deployment-scripts, backend, frontend, container, terraform]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       id-token: write
     uses: ./.github/workflows/deploy.yml
+    secrets: inherit

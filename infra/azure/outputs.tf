@@ -1,5 +1,5 @@
 output "resource_group_name" {
-  value = azurerm_resource_group.demo.name
+  value = data.azurerm_resource_group.demo.name
 }
 
 output "acr_name" {
@@ -10,20 +10,32 @@ output "acr_login_server" {
   value = azurerm_container_registry.app.login_server
 }
 
-output "web_app_name" {
-  value = module.web.name
+output "backend_web_app_name" {
+  value = module.backend.name
 }
 
-output "web_app_url" {
-  value = module.web.url
+output "backend_web_app_url" {
+  value = module.backend.url
 }
 
-output "vm_name" {
-  value = module.vm.name
+output "frontend_web_app_name" {
+  value = module.frontend.name
 }
 
-output "vm_public_ip" {
-  value = module.vm.public_ip
+output "frontend_web_app_url" {
+  value = module.frontend.url
+}
+
+output "storage_account_name" {
+  value = module.storage.name
+}
+
+output "storage_account_url" {
+  value = trimsuffix(module.storage.blob_endpoint, "/")
+}
+
+output "knowledge_documents" {
+  value = module.storage.knowledge_blobs
 }
 
 output "foundry_project_endpoint" {

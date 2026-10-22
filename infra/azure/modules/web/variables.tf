@@ -7,7 +7,7 @@ variable "resource_group_name" {
 variable "location" {
   type = string
 }
-variable "sku" {
+variable "service_plan_id" {
   type = string
 }
 variable "registry_url" {
@@ -16,8 +16,8 @@ variable "registry_url" {
 variable "image_name" {
   type = string
 }
-variable "ai_settings" {
+variable "app_settings" {
   type        = map(string)
   default     = {}
-  description = "Non-secret Foundry and model configuration."
+  description = "Non-secret configuration (storage endpoint, containers, AI mode, Foundry endpoints)."
 }

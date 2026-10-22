@@ -1,4 +1,18 @@
-name: launchpad-$(Date:yyyyMMdd)-$(Rev:r)
+# AZURE DEVOPS SETUP - Pipelines > Library > variable group mmaug_bootcamp_var:
+# Required non-secret VARIABLES: AZURE_SUBSCRIPTION_ID,
+# AZURE_RESOURCE_GROUP=RG-MMAUG-Bootcamp, ACR_NAME (not registry hostname),
+# BACKEND_WEB_APP_NAME, FRONTEND_WEB_APP_NAME (Terraform outputs).
+# Required SECRET variable: SPECIALIST_API_TOKEN (random, 32+ chars).
+# Authorize this pipeline to use the variable group.
+# Service connection azure-demo-wif: configure Azure ARM workload federation
+# with existing SP client/tenant/subscription; GitHub OIDC trust is NOT DevOps trust.
+# Configure environment azure-demo approvals/checks and authorize this pipeline.
+# PARAMETERS, not Library variables: deploy (default true),
+# azureServiceConnection (default azure-demo-wif).
+# AUTOMATIC outputs: BACKEND_IMAGE_REF, FRONTEND_IMAGE_REF, Build.SourceVersion,
+# Build.BuildId and System.JobAttempt; do not create these manually.
+# Application delivery only; GitHub infra.yml owns infrastructure orchestration.
+name: support-agent-$(Date:yyyyMMdd)-$(Rev:r)
 
 trigger:
   branches:
@@ -17,6 +31,11 @@ parameters:
     type: string
     default: azure-demo-wif
 
+# Library variable group: AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP, ACR_NAME,
+# BACKEND_WEB_APP_NAME, FRONTEND_WEB_APP_NAME and secret SPECIALIST_API_TOKEN.
+variables:
+  - group: mmaug_bootcamp_var
+
 pool:
   vmImage: ubuntu-latest
 
@@ -25,7 +44,8 @@ lockBehavior: sequential
 stages:
   - stage: Test
     jobs:
-      - job: PythonTests
+      - job: BackendTests
+        displayName: Backend (Python API + agent)
         steps:
           - checkout: self
             persistCredentials: false
@@ -34,17 +54,33 @@ stages:
               versionSpec: '3.12'
           - bash: |
               set -euo pipefail
-              pip install -r launchpad-lab/requirements.txt
-              cd launchpad-lab
+              cd support-agent/backend
+              pip install -r requirements.txt
               python -m unittest -v
-            displayName: Test the Python app
+            displayName: Test the Flask API, agent and storage
+      - job: FrontendTests
+        displayName: Frontend (React)
+        steps:
+          - checkout: self
+            persistCredentials: false
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '22.x'
+          - bash: |
+              set -euo pipefail
+              cd support-agent/frontend
+              npm ci --no-audit --no-fund
+              npm test
+              npm run build
+              node --test server.test.mjs
+            displayName: Test and build the React frontend
       - job: DeploymentScriptTests
         steps:
           - checkout: self
             persistCredentials: false
           - bash: |
               set -euo pipefail
-              bash -n scripts/deploy-azure.sh scripts/deploy-vm.sh tests/test-deploy.sh
+              bash -n scripts/deploy-azure.sh scripts/bootstrap-state.sh tests/test-deploy.sh
               bash tests/test-deploy.sh
             displayName: Test deployment scripts without Azure calls
 
@@ -71,11 +107,14 @@ stages:
                 [[ "$registry" =~ ^[a-zA-Z0-9]+\.azurecr\.io$ ]] || { echo "Invalid registry hostname" >&2; exit 1; }
                 tag="${SOURCE_SHA}-${BUILD_ID}-${JOB_ATTEMPT}"
                 az acr login --name "$ACR_NAME" --output none
-                docker build --platform linux/amd64 -t "$registry/launchpad:$tag" launchpad-lab
-                docker push "$registry/launchpad:$tag"
-                digest=$(az acr repository show --name "$ACR_NAME" --image "launchpad:$tag" --query digest --output tsv)
-                [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "Invalid image digest" >&2; exit 1; }
-                echo "##vso[task.setvariable variable=imageRef;isOutput=true]$registry/launchpad@$digest"
+                for target in backend frontend; do
+                  repository="support-agent-$target"
+                  docker build --platform linux/amd64 --target "$target" -t "$registry/$repository:$tag" support-agent
+                  docker push "$registry/$repository:$tag"
+                  digest=$(az acr repository show --name "$ACR_NAME" --image "$repository:$tag" --query digest --output tsv)
+                  [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "Invalid image digest" >&2; exit 1; }
+                  echo "##vso[task.setvariable variable=${target}ImageRef;isOutput=true]$registry/$repository@$digest"
+                done
             env:
               ACR_NAME: $(ACR_NAME)
               SOURCE_SHA: $(Build.SourceVersion)
@@ -86,10 +125,11 @@ stages:
     dependsOn: Build
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'), ${{ eq(parameters.deploy, true) }})
     variables:
-      IMAGE_REF: $[ stageDependencies.Build.BuildImage.outputs['publishImage.imageRef'] ]
+      BACKEND_IMAGE_REF: $[ stageDependencies.Build.BuildImage.outputs['publishImage.backendImageRef'] ]
+      FRONTEND_IMAGE_REF: $[ stageDependencies.Build.BuildImage.outputs['publishImage.frontendImageRef'] ]
     jobs:
       - deployment: AzureDemo
-        displayName: Deploy one image to both targets
+        displayName: Deploy the image to App Service
         environment: azure-demo
         strategy:
           runOnce:
@@ -98,7 +138,7 @@ stages:
                 - checkout: self
                   persistCredentials: false
                 - task: AzureCLI@2
-                  displayName: Deploy via shared scripts
+                  displayName: Deploy and verify via shared script
                   inputs:
                     azureSubscription: ${{ parameters.azureServiceConnection }}
                     scriptType: bash
@@ -106,9 +146,12 @@ stages:
                     scriptPath: scripts/deploy-azure.sh
                     addSpnToEnvironment: false
                   env:
-                    IMAGE_REF: $(IMAGE_REF)
+                    BACKEND_IMAGE_REF: $(BACKEND_IMAGE_REF)
+                    FRONTEND_IMAGE_REF: $(FRONTEND_IMAGE_REF)
                     AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
                     AZURE_RESOURCE_GROUP: $(AZURE_RESOURCE_GROUP)
                     ACR_NAME: $(ACR_NAME)
-                    AZURE_WEB_APP_NAME: $(AZURE_WEB_APP_NAME)
-                    AZURE_VM_NAME: $(AZURE_VM_NAME)
+                    BACKEND_WEB_APP_NAME: $(BACKEND_WEB_APP_NAME)
+                    FRONTEND_WEB_APP_NAME: $(FRONTEND_WEB_APP_NAME)
+                    # Secret variables must be mapped explicitly.
+                    SPECIALIST_API_TOKEN: $(SPECIALIST_API_TOKEN)

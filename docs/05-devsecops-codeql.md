@@ -2,162 +2,100 @@
 
 **27 October 2026 — Advanced Cloud Architecture & DevOps CI/CD Pipeline Process**
 
-DevSecOps puts security feedback into the development/release process. It does not mean one scanner proves an application, image, infrastructure, or cloud subscription is secure.
+DevSecOps adds security feedback to normal development and release work. One
+scanner does not prove source code, dependencies, infrastructure, containers or
+a live Azure deployment are secure. Repository scans run independently of the
+teaching date; this is an October 27 workshop topic, not a prerequisite for the
+October 17 Python/Docker foundations.
 
-## Session placement and prerequisites
+## CodeQL configuration
 
-The **DevSecOps workshop belongs to October 27**, alongside advanced CI/CD.
-It is not an October 17 exercise. Bring the tested Python app and Docker
-fundamentals from the earlier session, then read the
-[pipeline stage and identity guide](04-pipelines.md).
+`.github/workflows/codeql.yml` runs on pushes and pull requests to `main`,
+manual dispatch and a weekly schedule. Its matrix analyzes three language
+categories: `python` (Flask backend), `javascript-typescript` (React frontend)
+and `actions` (workflow files). It uses CodeQL action v4 with `build-mode:
+none` and the checked-in `.github/codeql/codeql-config.yml` using
+`security-extended` queries. Configured paths include `support-agent`,
+`scripts` and `.github/workflows`; generated/dependency directories and tests
+are excluded.
 
-Repository scans remain enabled before, during and between both sessions.
-Changing the curriculum does not delay scanning until October 27, disable its
-triggers, or silently add new security gates. The implementation and limitations
-below remain the source of truth.
+CodeQL builds a semantic representation of source and runs queries to detect
+supported risky patterns and data flows. Successful analysis means the job
+completed and findings were uploaded; it does not mean there are no alerts.
+Review actual alerts and source flow, severity and remediation rather than
+adding a deliberately unsafe sample just to populate a screenshot. CodeQL does
+not scan runtime posture or replace dependency, image, IaC or secret scanning.
 
-This repository includes a concrete [CodeQL workflow](../.github/workflows/codeql.yml), not only a slide example. It analyzes the Python API and the browser JavaScript in `launchpad-lab/static/app.js`.
+Permissions are scoped to the CodeQL job: read source and publish security
+results, with workflow metadata access as configured. Scans need no Azure
+credentials or OIDC token. Do not use privileged pull-request execution to work
+around GitHub policy. Branch protection can require a scan job to run, but a
+successful job is not itself an alerts threshold or a deployment gate.
 
-## October 27 workshop sequence
+## Workshop sequence
 
-1. Map the current pipeline: tests, source scanning, image publication, approval,
-   deployment and verification. Identify which steps are connected and which
-   run independently.
-2. Read the checked-in CodeQL workflow. Explain triggers, language jobs, action
-   pins and minimal permissions before running it.
-3. Inspect both analysis jobs and the code-scanning alerts view. For a real
-   alert, review the source/data flow, severity and remediation; record a reason
-   for any dismissal. A zero-alert scan needs no artificial vulnerable code.
-4. Distinguish workflow completion checks, merge policies and release gates.
-   Identify what requires external GitHub settings or new pipeline integration.
-5. Review a candidate release: commit, CI/scan results, outstanding alerts,
-   identity scopes, environment approval and immutable image digest.
-6. Discuss the missing image/dependency/secret/IaC checks, SBOM/provenance and
-   Defender integration. Define proposed enforcement and evidence, but label
-   these as **not implemented** unless actually configured and verified.
-7. After the chosen pipeline deploys, review target verification and the
-   known-good-digest recovery plan. A passing source scan is not runtime proof.
+1. Map tests, CodeQL, image build, release approval and deployment. Identify
+   which jobs block later work and which run independently.
+2. Read the workflow and CodeQL config; review triggers, matrix, pinned actions,
+   included paths and least-privilege permissions.
+3. Inspect each language result and any alerts. For an alert, trace the finding
+   and disposition; a zero-alert result only describes this scan's scope.
+4. Distinguish requiring a workflow check from requiring no alerts. Configure
+   merge protection explicitly if the repository plan and policy support it.
+5. Check how release approvers inspect scan results. The current release
+   workflow does not query CodeQL alerts or wait for an alerts policy.
+6. Propose missing controls—dependency and secret scanning, container image
+   vulnerability scanning, Terraform policy checks, SBOM/provenance and live
+   configuration monitoring—as future work, not existing features.
 
-## What CodeQL actually does
+## Application and infrastructure controls in this solution
 
-CodeQL builds a semantic database from **source code**, then runs queries looking for patterns such as unsafe data flow, injection, or other supported language-specific weaknesses. Analysis is deeper than searching for dangerous words, but it is still limited by extraction, query coverage, and the code paths modeled.
+- Flask applies `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
+  `X-Frame-Options: DENY`, and a Content Security Policy; API responses use
+  `Cache-Control: no-store`. Request bodies are limited to 16 KiB.
+- Specialist routes require a shared bearer token of at least 32 characters;
+  the API fails closed when it is missing or a placeholder. Use HTTPS for
+  deployed traffic and keep the secret in the pipeline environment/secret store.
+- Customer ticket access keys are generated randomly. Only SHA-256 hashes are
+  stored, comparisons use constant-time `secrets.compare_digest`, and the
+  customer view does not expose internal ticket fields.
+- Azure Blob Storage has shared keys and anonymous blob access disabled. App
+  identity receives only Blob Data Contributor on `tickets` and Blob Data
+  Reader on `knowledge`; deployment identity's knowledge upload role is scoped
+  to that container.
+- GitHub deploy uses OIDC; Azure Pipelines uses workload identity federation.
+  App Service uses managed identity for ACR pull and Blob access.
+- Pipeline release uses immutable backend and frontend ACR image digests.
+  Both Docker targets run non-root (Python UID 10001, frontend Node user).
+- Infrastructure OIDC uses GitHub environment dev. Bootstrap state storage is
+  outside workload Terraform ownership; runtime identities cannot access state.
+  Configure required reviewers explicitly: federation alone is not approval.
 
-The matrix uses current supported language IDs:
+These are useful safeguards, not a complete security certification. Review
+source, roles, runtime configuration and the exact release artifact together.
 
-```yaml
-language: [python, javascript-typescript]
-```
+## Known limitations and extension ideas
 
-Each language runs a separate job with `build-mode: none`. Python and JavaScript do not require a compiler build for this extraction mode. The initialize step selects the language and the analyze step publishes findings with a separate language category. Tests/builds do not replace analysis and are not needed solely for CodeQL extraction here.
+| Current limitation | Possible next step |
+| --- | --- |
+| No rate limiting on public ticket creation; requests can trigger paid model calls. | Add gateway/app-level throttling, abuse monitoring and quotas. |
+| One shared specialist token; no per-user specialist identity or audit attribution. | Integrate Entra ID, for example App Service Easy Auth, and per-user authorization. |
+| `LocalStore` is single-process and unsuitable for scaled production instances. | Use the configured Azure Blob store (used in Azure). |
+| No email delivery; customers see status/replies in the portal. | Add Azure Communication Services with consent, delivery and privacy controls. |
+| Storage public network access remains enabled; there is no private endpoint. | Add private networking and validate DNS, routing and access policy. |
 
-The original training example's `github/codeql-action/*@v2` is outdated. This repository pins **CodeQL action v4** to an immutable commit, alongside pinned checkout; do not paste the old v2 snippet into a new workflow. Keep pins updated through reviewed action upgrades. Both current supported language identifiers and action major versions matter.
+The storage account still uses Entra-only authorization; public network access is
+a network exposure setting, not a shared-key setting. CodeQL does not scan Azure
+resource posture, and the delivery pipeline does not enforce an alerts threshold.
 
-## Triggers and permissions
+## Release review
 
-The workflow runs on:
+Before approval, verify the reviewed commit, backend/frontend tests, CodeQL
+results and open alerts, identity scope, token handling and digest. Afterward,
+verify the live health/configuration/knowledge checks and logs. A source scan
+cannot establish that a support draft is accurate; the human approval step
+remains part of the safety design.
 
-- pushes to `main`;
-- pull requests targeting `main`;
-- manual dispatch;
-- Mondays at 06:23 UTC (scheduled scans use the default branch; execution can be delayed).
-
-It does **not** sign in to Azure or deploy anything. `contents: read` permits checkout. `security-events: write` permits publishing code-scanning results; `actions: read` supports workflow metadata/access where needed. These permissions are scoped to the analysis jobs, not granted to every workflow in the repository. No `id-token`, cloud secrets, or broad repository-write token is needed for scans.
-
-For this public repository, GitHub CodeQL/code scanning is available without the private-repository paid entitlement. Availability for private repositories depends on the applicable GitHub plan/security product. Fork PR token permissions and code-scanning upload behavior are governed by GitHub; do not switch to `pull_request_target` with untrusted checkout or add privileged secrets as a workaround.
-
-## Enable it and find the result
-
-Instructor walkthrough (repository administrator or an appropriately delegated
-security role; button names vary with GitHub UI and plan):
-
-1. Open the **repository**, not account settings. Confirm that GitHub Actions is
-   permitted by repository/organization policy. Check CodeQL availability:
-   public repositories are supported; private repositories need the applicable
-   GitHub Code Security entitlement.
-2. Open **Settings → Code security** (sometimes **Code security and analysis**).
-   Find **Code scanning → CodeQL analysis**. Organization-managed settings may
-   require an organization administrator.
-3. Explain the choice: **Default setup** lets GitHub manage scanning;
-   **Advanced setup** uses a checked-in workflow. This workshop uses **advanced
-   setup**, because we want to teach the actual YAML, permissions and matrix.
-4. If default setup is already enabled, disable that setup before using this
-   advanced workflow. Do not run competing default and advanced setups for the
-   same repository.
-5. On a new repository, choose **Set up → Advanced** (or **Security → Code
-   scanning → Set up code scanning → CodeQL**). Save the complete supplied
-   `.github/workflows/codeql.yml`, using a PR if required. In this lab repository
-   the file already exists: review it rather than creating a duplicate.
-6. Ensure the workflow is merged onto the **default branch**. It targets
-   `main`; adjust the push/PR branch filters if your repository uses another
-   name. Scheduled scans run from the default branch. Verify the Python and
-   JavaScript/TypeScript matrix matches the repository's actual source.
-7. Open **Actions → CodeQL → Run workflow**, select `main`, and run it.
-   Manual dispatch appears only when the dispatch-enabled workflow exists on
-   the default branch and your permissions allow it.
-8. Expand **Analyze (python)** and **Analyze (javascript-typescript)**.
-   Inspect checkout, initialization and analysis/upload logs. A permissions,
-   policy or extraction failure is not a clean security scan.
-9. Open **Security → Code scanning** and filter by branch/tool. Inspect an
-   alert's source, data-flow path when available, severity and remediation.
-   If there are no alerts, explain that this means no findings in this scan's
-   scope, not proof of a vulnerability-free application.
-10. Separately configure **Settings → Rules → Rulesets** or branch protection
-    for required checks. If supported, enable code-scanning merge protection
-    with explicit tool/severity thresholds. Requiring a successful scan alone
-    does not require zero alerts and does not gate Azure deployment.
-11. Fix a real finding in a branch, add a regression test when appropriate,
-    open a PR and verify resolution in a new scan. Record the rationale for
-    dismissals. Never add exploitable sample code just to force an alert.
-
-If **Run workflow** or results are missing, check default-branch placement,
-Actions policy, repository visibility/entitlement and job upload permissions.
-Do not grant cloud credentials or switch to privileged untrusted PR execution.
-
-No alerts means **no alerts from this scan**, not “no vulnerabilities.” This small demo is not intentionally seeded with unsafe code; a successful zero-alert result is expected to be possible. Do not add a public exploitable endpoint just to make a screenshot.
-
-## Scan success is not an alerts gate
-
-The provided workflow is **standalone scanning**, not a deployment security gate:
-
-- A successful `Analyze (python)` or `Analyze (javascript-typescript)` job means analysis/upload succeeded. Those jobs can succeed **while alerts exist**.
-- Branch protection/rulesets can require those checks and the CI Python/Terraform checks before merging. That ensures execution, not absence of findings.
-- To block merges on findings, separately configure GitHub **code-scanning merge protection** where available, selecting tools and severity thresholds. Verify its behavior on a controlled test PR; do not assume requiring the workflow check implements it.
-- Successful main-push CI calls the reusable Azure release workflow; manual release remains available. Both routes have a release test gate and externally configured environment approval, but do not query alerts or await CodeQL. Approvers should review the commit's CI, scanning status, and outstanding alerts. Requiring a separate alerts gate before **deployment** needs an explicit additional integration/policy.
-- Azure DevOps does not run this GitHub CodeQL workflow as part of its stages. GitHub scans the connected repository; that is not an automatic Azure DevOps release gate.
-
-## What this demo covers — and does not
-
-| Layer | Present here | What it does not prove |
-| --- | --- | --- |
-| Application behavior | Python HTTP tests | all business edge cases/security properties |
-| Source semantics | CodeQL Python + JavaScript | container-package CVEs, complete Terraform policy compliance, live cloud posture |
-| Infrastructure syntax/schema | Terraform format/validate | safe networking, least privilege, cost limits, drift |
-| Cloud authentication | GitHub OIDC / Azure DevOps WIF, target managed identities | that every authorized workflow change is safe |
-| Release integrity | same ACR SHA-256 digest on both targets | signed provenance or an SBOM |
-| Release control | successful main-push CI hands off to CD + external environment approvals; manual release retained | automatically blocking outstanding alerts |
-
-CodeQL is **not a universal misconfiguration scanner**. It does not replace Terraform policy checks, Docker image vulnerability scans, dependency auditing, secret scanning, or live configuration review. No image-CVE gate is included in these teaching pipelines; the image is built and pushed after tests. Discuss those tools during the October 27 workshop as deliberate additional work rather than claiming CodeQL already provides them.
-
-Similarly, **Microsoft Defender for Cloud is not automatically integrated** by enabling CodeQL, using Azure login, or deploying into Azure. Defender plans, DevOps connectors, permissions, and any release-policy wiring require separate configuration and may have costs. No Defender connector or subscription policy is created by this repository.
-
-## October 27 release-review checklist
-
-Before approving a release:
-
-1. Confirm you are deploying a reviewed `main` commit and a recorded immutable image.
-2. Read the CI results and both language scan results; inspect alerts, not only green workflow badges.
-3. Check the federated identity, resource-group/registry scopes, and target managed identities.
-4. Remember Run Command is root execution and public VM HTTP is demo-only.
-5. Keep a known-good digest for deliberate rollback and read readiness/log output after release.
-
-Action versions verified through GitHub's public API when this example was authored: checkout **v7.0.1**, setup-python **v7.0.0**, Azure login **v3.1.0**, setup-terraform **v4.0.1**, and CodeQL action **v4.38.3**. The files pin full commit SHAs rather than moving tags; annotated tags were resolved to their underlying commits. Update them as a reviewed maintenance task.
-
-### References
-
-- [CodeQL supported languages/frameworks](https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/)
-- [CodeQL action](https://github.com/github/codeql-action)
-- [Advanced code-scanning setup](https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning)
-- [CodeQL build modes](https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/codeql-code-scanning-for-compiled-languages)
-- [Code-scanning merge protection](https://docs.github.com/en/code-security/code-scanning/managing-your-code-scanning-configuration/configuring-code-scanning-merge-protection)
-- [GitHub Actions security hardening](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions)
-- [Defender for Cloud DevOps security overview](https://learn.microsoft.com/azure/defender-for-cloud/defender-for-devops-introduction)
+References: [CodeQL supported languages](https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/),
+[CodeQL action](https://github.com/github/codeql-action),
+[GitHub Actions security hardening](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions).

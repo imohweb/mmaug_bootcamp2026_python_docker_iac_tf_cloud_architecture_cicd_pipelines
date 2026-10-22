@@ -1,256 +1,81 @@
-# 04 — Two pipelines, one immutable Docker image
+# 04 - Infrastructure and application CI/CD
 
-**27 October 2026 — Advanced Cloud Architecture & DevOps CI/CD Pipeline Process**
+Use [skills.md](../skills.md) as the reusable operational runbook and the
+[README](../README.md) for local/cloud startup and architecture.
 
-## Session placement
+## Infrastructure: GitHub Actions
 
-This is the **October 27 advanced delivery workshop**, not an October 17
-configuration lab. The earlier session only needs a short conceptual
-build/test/release handoff; participants do not need cloud release identities,
-protected environments or scanner configuration to finish the foundations.
+[infra.yml](../.github/workflows/infra.yml) bootstraps storage before Terraform
+initialization, then plans/applies infrastructure in existing
+`RG-MMAUG-Bootcamp`. It uses the existing SP `mmaug_bootcamp_spn_2026` with OIDC
+and GitHub environment **dev**, matching the existing federation.
 
-The app and shared deployment scripts do not change merely because the session
-is more advanced. Choose one orchestrator at a time, and distinguish the
-implemented demo from production controls that remain to be added.
+The pipeline must consume the saved plan it presents for review. Do not apply
+untrusted pull-request code with Azure credentials. State, plans and outputs
+are sensitive; keep artifact retention short and never print raw plan JSON.
+Bootstrap and apply are paid operations and require explicit authorization.
 
-## October 27 workshop checkpoints
+Bootstrap storage has private `tfstate`, `knowledge` and `tickets` containers.
+It is not owned by the Terraform app root module, so destroying the workload
+cannot destroy its own backend. An earlier local deployment requires state
+migration before the first remote-state run.
 
-| Step | Exercise | Evidence to inspect |
-| --- | --- | --- |
-| 1. Architecture and ownership | Compare App Service and VM/Nginx; separate Terraform-owned infrastructure from pipeline-owned image releases | Module outputs, lifecycle ignore for the release image, hosting responsibilities |
-| 2. Trust and release control | Configure federation, scoped roles, `main` restrictions and external environment approvals | Exact OIDC subject/WIF connection, assigned scopes and approval settings |
-| 3. Stage and artifact handoffs | Trace both pipeline definitions, then choose one orchestrator for the live demo | Tests, release tag, resolved ACR digest and cross-stage output |
-| 4. DevSecOps review | Complete [the CodeQL workshop](05-devsecops-codeql.md) before approving a release | Both scan jobs, alerts, reviewed commit and explicit policy limitations |
-| 5. Delivery verification | Run offline regression checks, deploy the reviewed digest and inspect both targets | Deployment logs, guest marker, `/health` and `/sum` payloads |
-| 6. Recovery and cleanup | Discuss partial success and redeploying a known-good digest; clean up paid resources | Target status, prior release digest and reviewed destroy plan |
+Contributor on the RG is not enough for Terraform RBAC or Blob data operations.
+An administrator must prepare scoped RBAC administration and data roles before
+dispatch. Scripts do not auto-escalate. Required reviewers and branch
+restrictions must be configured externally on dev; OIDC alone is not approval.
+See the actual workflow for current input and variable names.
 
-This is a teaching sequence, not new pipeline wiring. The CodeQL review in
-step 4 is an approver's responsibility in the current demo; the deployment
-workflow does not automatically await scans or enforce an alerts threshold.
-Discuss image/dependency scanning, SBOM/provenance and automated security gates
-as additional controls to implement, not as features already present.
+## Application: GitHub Actions
 
-## What you will build
+[ci.yml](../.github/workflows/ci.yml) tests Python, React and the Node API proxy,
+builds images and smoke-tests the split topology, validates Terraform and runs
+offline deployment tests. PRs do not deploy. Successful pushes to main invoke
+[deploy.yml](../.github/workflows/deploy.yml).
 
-GitHub Actions and Azure DevOps are **alternative release orchestrators** for the same repository. Both test the Python app, build the `launchpad-lab/Dockerfile` for `linux/amd64`, push `launchpad` to Azure Container Registry (ACR), resolve its SHA-256 digest, and deploy that **exact digest** to:
+The release uses dev OIDC, builds Docker targets backend and frontend, pushes
+`support-agent-backend` and `support-agent-frontend` with unique tags, resolves
+both digests and deploys them through the shared script.
 
-1. Linux App Service, using its managed identity to pull the container.
-2. An Ubuntu VM, using its managed identity to pull the container, with nginx forwarding public port 80 to `127.0.0.1:8000`.
-
-The VM's container listens on port 8000 but is published only on loopback. No public SSH is needed: Azure VM Run Command executes the guest deployment script as root. HTTP on the VM is a **demo shortcut**, not production transport security.
-
-```text
-main push → successful CI → approved delivery
-                               ↓
-                  build once → ACR launchpad:commit-run-attempt
-                       ↓ resolve sha256 digest
-                ┌──────┴───────┐
-           App Service      Ubuntu VM
-              HTTPS         HTTP → nginx → container
-```
-
-Do not run both orchestrators against the same targets at once. GitHub's concurrency lock does not lock Azure DevOps, and two different release digests can overwrite each other's deployments. Stop one pipeline before using the other.
-
-Both definitions now continue from successful `main` CI into CD automatically.
-Deployment still requires the **external environment approval** configured below.
-Pull requests remain validation-only. This approval-gated flow is continuous
-delivery; removing the human gate would make it fully automatic deployment.
-
-**Configure approval gates before publishing/enabling this wiring.** This change
-does not create remote environments, reviewers, branch checks or service
-connections. An environment
-name is not proof of protection: platforms can create an unprotected environment.
-Only one orchestrator should be enabled/approved against the shared targets.
-For CI-only rehearsals, run GitHub CI manually or queue Azure Pipelines with
-`deploy: false`; do not use an unprotected environment as a substitute for approval.
-
-## Prerequisites: infrastructure first
-
-Provision `infra/azure` using the infrastructure lesson. Pipelines do **not** create infrastructure or assign roles. Wait for VM cloud-init to finish installing Docker, nginx, curl, and Azure CLI, and enabling Docker/nginx.
-
-Infrastructure outputs map to pipeline variables:
-
-| Terraform output | Variable |
-| --- | --- |
-| `resource_group_name` | `AZURE_RESOURCE_GROUP` |
-| `acr_name` | `ACR_NAME` |
-| `web_app_name` | `AZURE_WEB_APP_NAME` |
-| `vm_name` | `AZURE_VM_NAME` |
-| `vm_public_ip` | optional `VM_PUBLIC_IP` (GitHub/manual use) |
-| `acr_login_server` | queried by each build; no variable needed |
-| `web_app_url` | useful for visiting the app; script queries the hostname |
-
-Use the subscription ID of those resources as `AZURE_SUBSCRIPTION_ID`. Registry admin access stays **disabled**. This sample uses ACR's `LegacyRegistryPermissions` RBAC mode, not repository ABAC.
-
-### Identities and permissions
-
-Keep the **pipeline identity**, the **App Service identity**, and the **VM identity** separate:
-
-| Identity | Demo role / scope | Why |
-| --- | --- | --- |
-| GitHub federated app/service principal | `Contributor` on the demo resource group | Update App Service and invoke VM Run Command |
-| Azure DevOps federated service connection identity | same demo RG `Contributor` | Same deployment operations |
-| Each pipeline identity | `AcrPush` on this ACR | Push layers and read image digest |
-| App Service system-assigned identity | `AcrPull` on this ACR | Platform pulls the image |
-| VM system-assigned identity | `AcrPull` on this ACR | Guest pulls the image |
-
-The infrastructure grants the last two roles. An administrator with role-assignment permissions configures the pipeline roles **outside** these workflows. Contributor does not grant role-assignment permissions. Do not grant Owner or subscription-wide Contributor just to run this demo.
-
-RG Contributor is a beginner-friendly but broad permission. VM Run Command is **privileged root execution**. Production should narrow scopes/custom roles to web app read/config write/restart/log actions, VM read/`Microsoft.Compute/virtualMachines/runCommand/action`, and network-interface/public-IP reads for address lookup, with ACR push/read permissions confined to the registry. Protect workflow/script changes with review; approval is not a substitute for reading what will execute.
-
-## GitHub Actions setup
-
-1. In repository **Settings → Environments**, create `azure-demo`. Configure required reviewers, prevent self-review when available, and restrict deployments to `main`. These checks are configured in GitHub, not by YAML.
-2. Create an Entra app/service principal (or a dedicated supported federated identity). Add a federated credential with:
-   - issuer: `https://token.actions.githubusercontent.com`
-   - audience: `api://AzureADTokenExchange`
-   - subject: `repo:imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines:environment:azure-demo`
-3. Assign the pipeline roles above. For a fork or renamed repository, replace the owner/repository part of the subject exactly.
-4. Add these **environment variables** to `azure-demo`:
-
-| Variable | Value |
-| --- | --- |
-| `AZURE_CLIENT_ID` | federated Entra application's client ID |
-| `AZURE_TENANT_ID` | tenant ID |
-| `AZURE_SUBSCRIPTION_ID` | subscription GUID |
-| `AZURE_RESOURCE_GROUP` | output `resource_group_name` |
-| `ACR_NAME` | output `acr_name`, not the login hostname |
-| `AZURE_WEB_APP_NAME` | output `web_app_name` |
-| `AZURE_VM_NAME` | output `vm_name` |
-| `VM_PUBLIC_IP` | optional single public IPv4; omit to query the VM |
-
-No `AZURE_CLIENT_SECRET`, registry password, SSH key, or publish profile is used. IDs and resource names are configuration, not authentication secrets.
-
-### Existing federation after the repository rename
-
-The repository now uses the name
-`mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines`.
-GitHub URL redirects do not update Microsoft Entra federated credentials.
-If you configured trust using the former name, update that credential's
-repository subject to the exact value above before deploying. Keep issuer,
-audience and the protected environment aligned with the workflow. Remove stale
-trust for the former repository name after verifying the replacement.
-
-The Azure identity and its client ID can remain the same; changing the repository
-name does not require a client secret or broader permissions. Review GitHub
-environment variables, deployment restrictions and any external Azure DevOps
-repository connection as well. These external settings are not changed by
-editing this guide.
-
-### Files and execution order
-
-- [CI workflow](../.github/workflows/ci.yml): push/PR to `main`, or manual. Runs offline deployment regressions, Python 3.10/3.12 HTTP tests and Terraform 1.16.5 `fmt -check`, backend-disabled `init`, and `validate` for both Terraform roots. After **all three validation jobs/matrices succeed**, a `push` to `main` calls the reusable deployment workflow. PRs and manual CI runs do not call it. Terraform CI does not plan, apply or import resources.
-- [Deployment workflow](../.github/workflows/deploy.yml): supports `workflow_call` from CI and retains manual dispatch on `main`. It retests the same commit with Python 3.12; then `release` waits for the configured `azure-demo` environment approval before signing in, building/pushing and deploying.
-- `azure/login` exchanges a GitHub OIDC token for short-lived Azure credentials. The reusable-workflow caller permits `id-token: write`; inside that workflow, only `release` requests it, not the test job. There is no client-secret handoff.
-- The tag combines full commit SHA, GitHub run ID, and run attempt. After push, `az acr repository show` returns the digest. The job writes `IMAGE_REF=registry.azurecr.io/launchpad@sha256:…` to `$GITHUB_ENV`, then calls the shared script.
-
-After a push to `main`, open **Actions → CI → Approved Azure delivery**,
-review the tested commit and permissions, approve the pending environment
-deployment, and follow the nested release logs. A failed/cancelled CI dependency
-prevents the automatic handoff. The reusable workflow uses the caller's same
-commit, not a fresh checkout of whichever commit is newest at approval time.
-For a deliberate manual release, **Actions → Deploy Azure demo → Run workflow
-→ main** remains available; it retests that commit but bypasses the full CI
-dependency graph. Neither route waits for CodeQL or queries its alerts; see the
-next lesson for scan/gate distinctions.
-
-## Azure DevOps setup
-
-1. Import/connect this repository in Azure DevOps. Create a pipeline using [pipelines/azure-pipelines.yml](../pipelines/azure-pipelines.yml), not a generated starter YAML.
-2. Under **Project settings → Service connections**, create an **Azure Resource Manager** connection using **workload identity federation**. Name it `azure-demo-wif` (or override the `azureServiceConnection` parameter).
-   - Automatic creation is convenient if the setup administrator has the required Azure permissions.
-   - For manual federation, use the issuer and subject **shown by Azure DevOps** when creating the connection. Add those exact values to the Entra identity's federated credential, then verify/save. Do not reuse GitHub's federation subject or invent a service-connection subject.
-   - Grant the connection identity the RG/ACR roles above. Authorize only this pipeline; do not select grant access to all pipelines.
-3. Under **Pipelines → Environments**, create `azure-demo`, and configure an **Approvals and checks** approval with a reviewer. Configure branch control to allow `refs/heads/main`. Add an exclusive lock if you permit multiple runs; queue/review releases deliberately.
-4. Set these pipeline UI variables: `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `ACR_NAME`, `AZURE_WEB_APP_NAME`, `AZURE_VM_NAME`. They are non-secret configuration. Authentication belongs to the federated service connection. This pipeline always queries the VM's actual public IP.
-5. Once the environment checks, authorized connection and variables are ready, enable the pipeline's `main` trigger. `deploy` now defaults to `true`: successful main CI automatically builds/pushes, then waits for environment approval before deployment. For a test-only manual run, set `deploy: false`. PRs and non-main runs cannot build/publish or deploy, even if `deploy` is true.
-
-The stages are **Test → Build → Deploy**. `AzureCLI@2` authenticates through the WIF service connection, without exposing service-principal tokens to the script. Build pushes one image and emits:
+Environment variables:
 
 ```text
-##vso[task.setvariable variable=imageRef;isOutput=true]registry/launchpad@sha256:…
+AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+AZURE_RESOURCE_GROUP=RG-MMAUG-Bootcamp
+ACR_NAME, BACKEND_WEB_APP_NAME, FRONTEND_WEB_APP_NAME
 ```
 
-The named step `publishImage` in job `BuildImage` exports that value. Deploy reads it using:
+Environment secret: **SPECIALIST_API_TOKEN**, random and at least 32 characters.
+Configure infrastructure-specific storage/prefix values as named in infra.yml.
+No client secret, account key or publish profile is needed.
 
-```yaml
-IMAGE_REF: $[ stageDependencies.Build.BuildImage.outputs['publishImage.imageRef'] ]
-```
+## Azure Pipelines: application-only alternative
 
-This is a **cross-stage output**, not a local shell variable or an artifact guessed from `latest`. The deployment job waits for configured `azure-demo` approval, checks out the same source version, and invokes `scripts/deploy-azure.sh` via `AzureCLI@2`. Both Build and Deploy require successful prerequisites, `main`, a non-PR build reason and `deploy: true`; PR code cannot deploy. Test runs Python and offline deployment-script regressions. A failure in either job prevents Build.
+[azure-pipelines.yml](../pipelines/azure-pipelines.yml) retains Test -> Build ->
+Deploy for the two images. Variable group mmaug_bootcamp_var holds subscription,
+resource group, ACR and both web app names, with SPECIALIST_API_TOKEN marked
+secret and explicitly mapped. The azure-demo-wif service connection and
+azure-demo Azure DevOps environment require independent configuration; GitHub
+OIDC does not authorize Azure DevOps.
 
-GitHub's approval precedes its combined image-build/deploy job. Azure Pipelines
-builds and pushes first, so its approver can inspect the exported digest before
-Deploy. Rejected approvals prevent target changes; Azure's image may already
-exist in ACR. Neither flow provisions infrastructure or automatically rolls
-back a partially completed two-target release.
+Queue deploy=false for tests only. Its default is true, and successful
+non-PR main runs can release. It does not run the GitHub infrastructure
+workflow. Select one orchestrator per target.
 
-Configure an **exclusive lock** check on the Azure DevOps environment.
-`lockBehavior: sequential` makes that check serialize approved releases; the
-YAML setting alone does not create the lock. This still does not lock GitHub's
-separate deployment queue. Never approve competing releases from both systems.
+## Deployment and recovery
 
-YAML `pr` triggers apply when the repository provider supports them (including GitHub). For Azure Repos Git, configure a branch-policy build-validation rule instead. Azure DevOps tests Python 3.12 and the shared deployment regressions; GitHub CI additionally provides the 3.10/3.12 matrix and Terraform checks.
+[deploy-azure.sh](../scripts/deploy-azure.sh) receives BACKEND_IMAGE_REF and
+FRONTEND_IMAGE_REF as ACR digests, plus the two app names and secret token.
+It configures the backend first, verifies health/config/knowledge, then
+configures the frontend and verifies the proxied API and React shell.
+The frontend BACKEND_ORIGIN points to the HTTPS backend origin.
 
-## Shared scripts: exact manual interface
+The operation is not atomic. On failure, inspect both app images/logs before
+an authorized rollback with a known-good pair of digests. Do not guess mutable
+tags. Finish release verification with a synthetic submit/review/approve/track
+workflow and a real indexed-retrieval check; template fallback is not evidence
+of a working index.
 
-The VM script waits up to 300 seconds for `cloud-init status --wait` before
-checking installed tools and starting the release. A failed or timed-out
-bootstrap stops deployment with an explicit diagnostic. Inspect cloud-init
-logs rather than repeatedly deploying over an incomplete machine.
-
-[scripts/deploy-azure.sh](../scripts/deploy-azure.sh) runs on a **Linux runner** with Bash, Azure CLI, `curl`, `jq`, and GNU `timeout`. Authenticate beforehand (`az login` interactively for local manual use, OIDC/WIF in pipelines). It accepts **environment variables**, not positional arguments:
-
-| Name | Required? | Format |
-| --- | --- | --- |
-| `AZURE_SUBSCRIPTION_ID` | yes | subscription GUID |
-| `AZURE_RESOURCE_GROUP` | yes | existing demo resource group |
-| `ACR_NAME` | yes | alphanumeric ACR name |
-| `AZURE_WEB_APP_NAME` | yes | existing Linux custom-container app |
-| `AZURE_VM_NAME` | yes | existing Ubuntu VM |
-| `IMAGE_REF` | yes | `<acr>.azurecr.io/launchpad@sha256:<64 lowercase hex>` |
-| `VM_PUBLIC_IP` | no | one IPv4 address; omitted/empty means query Azure |
-
-```bash
-# On a Linux shell, after az login; substitute your actual outputs and digest.
-export AZURE_SUBSCRIPTION_ID="00000000-0000-0000-0000-000000000000"
-export AZURE_RESOURCE_GROUP="your-demo-rg"
-export ACR_NAME="yourregistry"
-export AZURE_WEB_APP_NAME="your-web-app"
-export AZURE_VM_NAME="your-vm"
-export IMAGE_REF="yourregistry.azurecr.io/launchpad@sha256:<actual-64-hex-digest>"
-bash scripts/deploy-azure.sh
-```
-
-The placeholder digest is intentionally invalid: use the real pushed digest. Obtain it with `az acr repository show --name "$ACR_NAME" --image "launchpad:<your-tag>" --query digest --output tsv`. The scripts reject tags, another repository/registry, shell metacharacters, and invalid required configuration before deploying.
-
-[scripts/deploy-vm.sh](../scripts/deploy-vm.sh) is the **guest script**, not a second runner-side deployment entry point. Its positional arguments are `$1 = IMAGE_REF`, `$2 = ACR_NAME`. The orchestrator supplies named Run Command parameters `imageRef=…`, `acrName=…` in that order; the Linux handler passes their values positionally. No other configuration variables are required in the guest. Run Command runs as root; `az login --identity` uses the VM's own identity. `az acr login` acquires a short-lived registry credential, never an admin password; Docker caches that credential in the guest's root Docker configuration.
-
-The orchestrator configures App Service's managed-identity pull, `WEBSITES_PORT=8000`, container filesystem logging, and the digest using current `--container-image-name`/`--container-registry-url` flags; then restarts it. It uses neither deprecated `--docker-custom-image-name` nor registry password flags.
-
-The guest pulls **before removing** the old container, replaces only the container named `launchpad`, and starts the new container with `--restart unless-stopped`. This simple replacement creates brief downtime; it is not a rolling or transactional deployment. If one target fails, the other may already have changed. Correct the failure and redeploy, or explicitly rerun with a previously successful digest for rollback. Terraform ignores the release image field so later infrastructure applies do not undo a pipeline release.
-
-## Verification and failures
-
-- Visit App Service `https://<hostname>/ui` and VM `http://<public-ip>/ui`.
-- Both **public endpoints** must return a JSON object with `/health` status `"ok"` and `/sum?values=5,10,15` numeric `total: 30` and numeric `average: 10`. Invalid/non-JSON payloads, missing fields, wrong values, and string `"10"` fail immediately and visibly, preserving the target's diagnostic-log path. Successful health alone is not sufficient. The guest's separate localhost check verifies nginx health before emitting its marker; the runner performs the strict JSON health-and-sum assertions on both Azure targets.
-- Startup is the **only** retried operation: up to 30 attempts, 5-second waits and 10-second request limits on the runner; 2-second waits and 5-second request limits in the guest. Authorization, build, push, and configuration failures stop immediately.
-- Failed App Service readiness prints a bounded 30-second log stream. Failed guest readiness prints the last 100 container-log lines and 30 nginx journal lines. Failed public VM readiness also retrieves guest diagnostics.
-- VM Run Command can report Azure provisioning success even when a shell command failed. The runner inspects guest messages and any returned exit codes and requires an exact digest-specific `LAUNCHPAD_DEPLOY_OK_<digest-hex>` line, emitted only after nginx/local health succeeds. A missing marker fails deployment.
-- Health and sum checks confirm availability/application behavior, not a build-version attestation. The VM additionally checks the running container's configured image digest; App Service applies the digest configuration but these endpoints do not identify the serving release.
-- `403`/image-pull failures: check **which identity** needs `AcrPush` vs `AcrPull`, correct scopes, and RBAC propagation. App Service managed-identity pulls need ACR ARM-audience authentication enabled (the default).
-- Missing VM prerequisites: inspect cloud-init completion; do not mask a failed bootstrap with repeated deployments. Public VM readiness requires HTTP 80 ingress; SSH and container port 8000 remain closed.
-
-### Offline deployment regression tests
-
-From the repository root, run `bash tests/test-deploy.sh` (requires Bash and `jq`). The persistent harness mocks Azure CLI, curl, Docker, service checks, sleep, and timeout; it makes **no live Azure, HTTP, or Docker calls**. It retains the original 12 success/failure scenarios and adds malformed/wrong health and sum JSON cases independently for App Service and the VM, for 38 scenarios total, including empty bodies, numeric strings, and multiple concatenated JSON objects. The guest root guard is bypassed only in the in-memory test copy; production scripts remain unchanged. GitHub CI runs this harness in its own offline job.
-
-### References
-
-- [Azure login action / OIDC](https://github.com/Azure/login)
-- [App Service custom containers and managed identity](https://learn.microsoft.com/azure/app-service/configure-custom-container?pivots=container-linux)
-- [Current container configuration CLI](https://learn.microsoft.com/cli/azure/webapp/config/container?view=azure-cli-latest)
-- [Linux VM Run Command](https://learn.microsoft.com/azure/virtual-machines/linux/run-command)
-- [Azure DevOps workload identity service connections](https://learn.microsoft.com/azure/devops/pipelines/library/connect-to-azure?view=azure-devops)
-- [Azure DevOps approvals/checks](https://learn.microsoft.com/azure/devops/pipelines/process/approvals?view=azure-devops)
-- [Cross-stage output variables](https://learn.microsoft.com/azure/devops/pipelines/process/set-variables-scripts?view=azure-devops)
+CodeQL runs separately for Python, JavaScript/TypeScript and Actions. A green
+scan is not an automatic alerts-based deployment gate. Configure branch
+protections and review policies deliberately.

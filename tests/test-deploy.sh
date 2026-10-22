@@ -1,180 +1,96 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-cd "$repo_dir"
-command -v jq >/dev/null || { echo "Tests require jq." >&2; exit 1; }
+cd "$(dirname "$0")/.."
 export AZURE_SUBSCRIPTION_ID=12345678-1234-1234-1234-123456789abc
-export AZURE_RESOURCE_GROUP=demo-rg ACR_NAME=demoregistry
-export AZURE_WEB_APP_NAME=demo-web AZURE_VM_NAME=demo-vm
-export IMAGE_REF="demoregistry.azurecr.io/launchpad@sha256:$(printf 'a%.0s' {1..64})"
-unset VM_PUBLIC_IP
-export MOCK_MODE=success FAIL_TARGET=all
-passed=0
-
-# Exported functions replace every Azure, HTTP, Docker and service operation.
+export AZURE_RESOURCE_GROUP=RG-MMAUG-Bootcamp ACR_NAME=demoregistry
+export BACKEND_WEB_APP_NAME=demo-backend FRONTEND_WEB_APP_NAME=demo-frontend
+export SPECIALIST_API_TOKEN="$(printf 't%.0s' {1..40})"
+export BACKEND_IMAGE_REF="demoregistry.azurecr.io/support-agent-backend@sha256:$(printf 'a%.0s' {1..64})"
+export FRONTEND_IMAGE_REF="demoregistry.azurecr.io/support-agent-frontend@sha256:$(printf 'b%.0s' {1..64})"
+export MODE=success
+export MOCK_LOG
+MOCK_LOG=$(mktemp)
+trap 'rm -f "$MOCK_LOG"' EXIT
 az() {
+  printf '%s\n' "$*" >> "$MOCK_LOG"
   case "$*" in
-    'webapp show '*) printf '%s\n' demo-web.azurewebsites.net ;;
-    'vm show '*) printf '%s\n' 203.0.113.10 ;;
-    'vm run-command invoke '*)
-      case "$MOCK_MODE" in
-        missing-marker)
-          printf '%s\n' '{"value":[{"code":"ProvisioningState/succeeded","message":"script failed"}]}' ;;
-        nonzero-exit)
-          jq -n --arg marker "LAUNCHPAD_DEPLOY_OK_${IMAGE_REF##*:}" \
-            '{value:[{exitCode:1,message:$marker}]}' ;;
-        *)
-          jq -n --arg marker "LAUNCHPAD_DEPLOY_OK_${IMAGE_REF##*:}" \
-            '{value:[{message:("[stdout]\n" + $marker + "\n[stderr]\n")}]}' ;;
-      esac ;;
-    'webapp restart '*) [[ "$MOCK_MODE" != azure-failure ]] ;;
-    *) : ;;
+    'webapp show '*)
+      [[ "$*" != *demo-backend* ]] || { echo demo-backend.azurewebsites.net; return; }
+      echo demo-frontend.azurewebsites.net ;;
+    'webapp restart '*) [[ "$MODE" != azure-failure ]] ;;
+    'webapp config appsettings set '*)
+      if [[ "$*" == *demo-backend* ]]; then
+        local argument
+        for argument; do
+          if [[ "$argument" == @* ]]; then
+            jq -e --arg token "$SPECIALIST_API_TOKEN" '.SPECIALIST_API_TOKEN == $token' "${argument#@}" >/dev/null
+          fi
+        done
+      fi ;;
   esac
 }
-
 curl() {
-  local url target mode
+  local url config
   for url; do :; done
+  [[ "$url" == https://demo-backend.azurewebsites.net/* ||
+     "$url" == https://demo-frontend.azurewebsites.net/* ]] || return 22
+  [[ "$MODE" != unavailable ]] || return 22
+  [[ "$MODE" != frontend-unavailable || "$url" != https://demo-frontend.azurewebsites.net/* ]] || return 22
   case "$url" in
-    https://demo-web.azurewebsites.net/*) target=web ;;
-    http://203.0.113.10/*) target=vm ;;
-    http://127.0.0.1/*) target=guest ;;
-    *) echo "Unexpected mock URL: $url" >&2; return 1 ;;
+    */health)
+      if [[ "$MODE" == bad-health ]]; then echo '{"status":"bad"}'; else echo '{"status":"ok"}'; fi ;;
+    */api/config)
+      if [[ "$MODE" == bad-config ]]; then echo '{}'; else echo '{"ai_mode":"agent","teams":[{},{},{},{}]}'; fi ;;
+    */api/specialist/knowledge)
+      config=$(cat)
+      [[ "$config" == "header = \"Authorization: Bearer $SPECIALIST_API_TOKEN\"" ]] || return 22
+      if [[ "$MODE" == bad-knowledge ]]; then echo '{"documents":[]}'; else echo '{"documents":[{}]}'; fi ;;
+    */) if [[ "$MODE" == bad-html ]]; then echo 'missing'; else echo '<div id="root"></div>'; fi ;;
+    *) return 22 ;;
   esac
-  mode=success
-  if [[ "$FAIL_TARGET" == all || "$FAIL_TARGET" == "$target" ]]; then
-    mode=$MOCK_MODE
-  fi
-  [[ "$mode" != readiness-failure ]] || return 22
-  if [[ "$url" == */health ]]; then
-    case "$mode" in
-      health-malformed) printf '%s\n' '<html>not JSON</html>' ;;
-      health-wrong) printf '%s\n' '{"status":"not-ok"}' ;;
-      health-empty) : ;;
-      health-multiple) printf '%s\n' '{"status":"not-ok"}' '{"status":"ok"}' ;;
-      *) printf '%s\n' '{"status":"ok"}' ;;
-    esac
-  else
-    [[ "$url" == */sum?values=5,10,15 ]] || return 1
-    case "$mode" in
-      sum-malformed) printf '%s\n' '<html>not JSON</html>' ;;
-      sum-wrong-total) printf '%s\n' '{"total":31,"average":10}' ;;
-      sum-wrong-average) printf '%s\n' '{"total":30,"average":11}' ;;
-      sum-string-average) printf '%s\n' '{"total":30,"average":"10"}' ;;
-      sum-string-total) printf '%s\n' '{"total":"30","average":10}' ;;
-      sum-missing-average) printf '%s\n' '{"total":30}' ;;
-      sum-array) printf '%s\n' '[{"total":30,"average":10}]' ;;
-      sum-empty) : ;;
-      sum-multiple) printf '%s\n' '{"total":31,"average":11}' '{"total":30,"average":10}' ;;
-      *) printf '%s\n' '{"total":30,"average":10}' ;;
-    esac
-  fi
 }
-
 sleep() { :; }
 timeout() { shift; "$@"; }
-docker() {
-  case "$*" in
-    'container inspect launchpad') return 1 ;;
-    'inspect --format '*) printf '%s\n' "$IMAGE_REF" ;;
-    *) : ;;
-  esac
-}
-systemctl() { :; }
-journalctl() { :; }
-cloud-init() { [[ "$MOCK_MODE" != bootstrap-failure ]]; }
-export -f az curl sleep timeout docker systemctl journalctl cloud-init
-
-expect_pass() {
-  local output
-  if output=$(bash scripts/deploy-azure.sh 2>&1); then
-    [[ "$output" == *'Verified health and sum JSON contracts: https://demo-web.azurewebsites.net'* &&
-      "$output" == *'Verified health and sum JSON contracts: http://203.0.113.10'* ]] ||
-      { echo "FAIL: both endpoint verifications must run" >&2; exit 1; }
-    echo "PASS: $1"
-    passed=$((passed + 1))
-  else
-    printf 'FAIL: %s\n%s\n' "$1" "$output" >&2
-    exit 1
+export -f az curl sleep timeout
+count=0
+expect() {
+  local wanted=$1 output result=0
+  output=$(bash scripts/deploy-azure.sh 2>&1) || result=$?
+  if [[ "$wanted" == pass && "$result" != 0 || "$wanted" == fail && "$result" == 0 ]]; then
+    printf 'FAIL (%s): %s\n' "$MODE" "$output" >&2; exit 1
   fi
+  count=$((count + 1))
 }
-
-expect_fail() {
-  local output
-  if output=$(bash scripts/deploy-azure.sh 2>&1); then
-    echo "FAIL: $1 unexpectedly succeeded" >&2
-    exit 1
-  fi
-  if [[ -n "${2:-}" && "$output" != *"$2"* ]]; then
-    printf 'FAIL: %s did not report expected diagnostic %s\n%s\n' "$1" "$2" "$output" >&2
-    exit 1
-  fi
-  echo "PASS: $1 rejected"
-  passed=$((passed + 1))
-}
-
-expect_pass 'both public health and sum contracts, queried IP'
-export VM_PUBLIC_IP=203.0.113.10
-expect_pass 'both public contracts, explicit IP'
-unset VM_PUBLIC_IP
-for mode in missing-marker nonzero-exit azure-failure readiness-failure; do
-  export MOCK_MODE=$mode
-  expect_fail "$mode"
+expect pass
+grep -q -- "--container-image-name $BACKEND_IMAGE_REF" "$MOCK_LOG"
+grep -q -- "--container-image-name $FRONTEND_IMAGE_REF" "$MOCK_LOG"
+! grep -q "$SPECIALIST_API_TOKEN" "$MOCK_LOG"
+! grep -q 'vm run-command' "$MOCK_LOG"
+for MODE in azure-failure unavailable frontend-unavailable bad-health bad-config bad-knowledge bad-html; do
+  export MODE
+  expect fail
 done
-export MOCK_MODE=success
-saved_image=$IMAGE_REF
-export IMAGE_REF='demoregistry.azurecr.io/launchpad:latest'
-expect_fail 'mutable image tag'
-export IMAGE_REF="otherregistry.azurecr.io/launchpad@${saved_image##*@}"
-expect_fail 'different registry'
-export IMAGE_REF="$saved_image;echo unsafe"
-expect_fail 'shell metacharacters'
-export IMAGE_REF=$saved_image
-unset AZURE_RESOURCE_GROUP
-expect_fail 'missing required environment variable'
-export AZURE_RESOURCE_GROUP=demo-rg
-
-# Root is the only guest prerequisite bypassed, in-memory; files are unchanged.
-guest_script=$(sed 's/\[\[ "$EUID" -eq 0 \]\]/true/' scripts/deploy-vm.sh)
-export MOCK_MODE=bootstrap-failure
-if output=$(bash -s -- "$IMAGE_REF" "$ACR_NAME" <<< "$guest_script" 2>&1); then
-  echo 'FAIL: guest bootstrap failure unexpectedly succeeded' >&2
-  exit 1
-elif [[ "$output" != *"VM cloud-init did not complete successfully"* ]]; then
-  printf 'FAIL: guest bootstrap failure diagnostic missing\n%s\n' "$output" >&2
-  exit 1
-else
-  echo 'PASS: guest bootstrap failure blocks deployment'
-  passed=$((passed + 1))
-fi
-export MOCK_MODE=success
-if bash -s -- "$IMAGE_REF" "$ACR_NAME" <<< "$guest_script" |
-  grep -Fxq "LAUNCHPAD_DEPLOY_OK_${IMAGE_REF##*:}"; then
-  echo 'PASS: guest pull/run/nginx health/success marker'
-  passed=$((passed + 1))
-else
-  echo 'FAIL: mocked guest deployment' >&2
-  exit 1
-fi
-export MOCK_MODE=readiness-failure
-if bash -s -- "$IMAGE_REF" "$ACR_NAME" <<< "$guest_script" >/dev/null 2>&1; then
-  echo 'FAIL: guest readiness unexpectedly succeeded' >&2
-  exit 1
-else
-  echo 'PASS: guest bounded readiness failure'
-  passed=$((passed + 1))
-fi
-
-for target in web vm; do
-  export FAIL_TARGET=$target
-  for mode in health-malformed health-wrong health-empty health-multiple; do
-    export MOCK_MODE=$mode
-    expect_fail "$target $mode" 'Invalid health JSON contract:'
-  done
-  for mode in sum-malformed sum-wrong-total sum-wrong-average sum-string-average sum-string-total sum-missing-average sum-array sum-empty sum-multiple; do
-    export MOCK_MODE=$mode
-    expect_fail "$target $mode" 'Invalid sum JSON contract:'
-  done
-done
-echo "All $passed deployment regression scenarios passed (no live Azure/HTTP/Docker calls)."
+export MODE=success
+saved=$FRONTEND_IMAGE_REF
+export FRONTEND_IMAGE_REF=demoregistry.azurecr.io/support-agent-frontend:latest
+expect fail
+export FRONTEND_IMAGE_REF=$saved
+saved=$BACKEND_IMAGE_REF
+export BACKEND_IMAGE_REF="otherregistry.azurecr.io/support-agent-backend@sha256:$(printf 'a%.0s' {1..64})"
+expect fail
+export BACKEND_IMAGE_REF=$saved
+saved=$AZURE_RESOURCE_GROUP
+export AZURE_RESOURCE_GROUP=other-group
+expect fail
+export AZURE_RESOURCE_GROUP=$saved
+saved=$FRONTEND_WEB_APP_NAME
+export FRONTEND_WEB_APP_NAME=$BACKEND_WEB_APP_NAME
+expect fail
+export FRONTEND_WEB_APP_NAME=$saved
+export SPECIALIST_API_TOKEN=short
+expect fail
+export SPECIALIST_API_TOKEN="REPLACE-$(printf 'x%.0s' {1..40})"
+expect fail
+export SPECIALIST_API_TOKEN="$(printf 'q%.0s' {1..40})\"invalid"
+expect fail
+echo "All $count dual-app deployment scenarios passed (offline)."

@@ -1,159 +1,145 @@
-# Docker, completely broken into responsibilities
+# Docker: package the customer-support agent
 
-Run commands from `launchpad-lab`, unless a step says otherwise.
+Run repository commands from the project root unless a step says otherwise.
+The default image includes Flask and the built React portal for the local
+foundations lab. Cloud delivery builds separate backend and frontend targets.
 
-## Recipe, package, instance
+## Image, container and build context
 
 - **Dockerfile:** build instructions.
-- **Build context:** files available to the builder; the final `.` means here.
-- **Image:** layered packaged filesystem and runtime configuration.
-- **Container:** a process instance created from an image, plus writable layer.
-- **Registry:** distributes images; ACR will be ours in the Azure extension.
-- **Tag:** mutable label; a digest identifies image content.
+- **Build context:** files available to the builder; here it is `support-agent/`.
+- **Image:** layered, packaged filesystem and runtime configuration.
+- **Container:** a process created from an image, with a writable layer.
+- **Registry:** distributes images; Azure Container Registry (ACR) is used in
+  the Azure pipeline.
+- **Tag:** a mutable label; a digest identifies immutable image content.
 
-Linux containers share their host's Linux kernel. Docker Desktop typically
-supplies a Linux VM on macOS/Windows. CPU architecture still matters.
-Docker socket/group access is privileged; do not give it to untrusted code.
+Docker Desktop supplies Linux container support on macOS and Windows. Docker
+socket access is privileged; do not give it to untrusted code.
 
-## Every Dockerfile instruction
+## Multi-target Dockerfile
 
-| Instruction | Meaning in this application |
-|---|---|
-| `FROM python:3.12-slim` | Python interpreter plus a minimal Debian runtime. A tag is not an immutable digest. |
-| `WORKDIR /app` | Establish the directory for later commands and startup. |
-| `ENV ...` | Disable bytecode files, flush logs, document default port 8000. |
-| `RUN groupadd ... && useradd ...` | Build-time creation of uid/gid 10001; failure stops the build. |
-| `COPY requirements.txt .` | Copy the dependency manifest before frequently changing source for caching. |
-| `RUN pip install --no-cache-dir -r requirements.txt` | Install Flask/Gunicorn, Foundry/OpenAI SDKs, identity and dotenv dependencies into the image, not the host. |
-| `COPY --chown=app:app app.py .` | Package source with intended ownership. |
-| `COPY --chown=app:app ai_demo.py .` | Package the optional model/agent SDK helpers; no credentials are copied. |
-| `COPY ... templates/ ...` and `COPY ... static/ ...` | Package browser assets required by `/ui`. |
-| `USER app` | Run the application as non-root. |
-| `EXPOSE 8000` | Document internal port. This does **not** publish it on the host. |
-| `HEALTHCHECK ...` | Probe `/health` internally every ten seconds, three-second timeout, startup grace, repeated-failure threshold. Backslashes continue the Dockerfile instruction. The Python request command needs no curl package inside the image. |
-| `CMD ["gunicorn", ... "app:app"]` | Runtime startup in exec form: module `app`, Flask object `app`, two workers, all interfaces on internal 8000, access/error logs to standard streams. |
-
-`RUN` runs during build, whereas `CMD` sets default container startup. `ENTRYPOINT`
-defines a fixed executable when used; it is not needed here. Each build layer
-can be cached; changing a layer invalidates following layers. A multi-stage
-build separates build tools from runtime output when that actually helps; our
-small app does not need an artificial second stage.
-
-`.dockerignore` excludes local venvs, caches, Git metadata, `.env`, `.env-local`, tests and
-Terraform artifacts from the build context. It is not a universal secret scanner.
-
-The [optional AI demo](06-foundry-demo.md) provides the complete local Docker
-Desktop build/run, ACR login/tag/push, immutable image reference and
-managed-identity App Service deployment sequence.
-
-## Build and verify
+`support-agent/Dockerfile` uses `node:22-alpine` as the frontend-build stage:
+copy the npm manifests, run `npm ci`, copy the React source and run
+`npm run build`. The second stage starts from `python:3.12-slim`, installs only
+the backend requirements, copies the API and includes Markdown seed files for
+offline/local storage. The backend target excludes the React build; a separate
+frontend target serves React through a non-root Node static server/API proxy.
+The final combined target adds React assets back to Python for the original
+one-container lab. Node/npm do not ship in the Python runtime.
 
 ```bash
+docker build --target backend -t mmaug-support-agent-backend:1.0 support-agent
+docker build --target frontend -t mmaug-support-agent-frontend:1.0 support-agent
+```
+
+For a local rehearsal of the cloud split, use
+`docker compose -f support-agent/compose.split.yaml up --build -d` from the repo
+root after exporting a specialist token. The frontend proxies `/api` and
+`/health` to `BACKEND_ORIGIN=http://backend:8000`; Azure uses the HTTPS backend
+origin. Stop with the same Compose file and `down` (without `-v` to retain data).
+
+The runtime sets `PORT=8000`, `DATA_DIR=/data`, and paths for the UI and
+knowledge seed. It runs Gunicorn as non-root uid 10001, exposes container port
+8000, and has a `/health` Docker health check. The `/data` mount keeps local
+tickets across container replacement. `EXPOSE` documents an internal port; it
+does not publish it. `.dockerignore` excludes local virtual environments,
+node_modules, build output, local secrets and Terraform files from the context.
+
+```bash
+cd support-agent
 docker version
 docker info
-docker build -t mmaug-launchpad:1.0 .
-docker image ls mmaug-launchpad
-docker image inspect mmaug-launchpad:1.0
-docker run -d --name mmaug-launchpad-manual -p 127.0.0.1:8080:8000 -e "APP_MESSAGE=Hello from Docker!" mmaug-launchpad:1.0
+docker build -t mmaug-support-agent:1.0 .
+docker image inspect mmaug-support-agent:1.0
+docker run -d --name support-agent-manual \
+  -p 127.0.0.1:8080:8000 \
+  -e SPECIALIST_API_TOKEN="$SPECIALIST_API_TOKEN" \
+  -v support-agent-manual-data:/data \
+  mmaug-support-agent:1.0
 curl -fsS http://127.0.0.1:8080/health
-curl -fsS "http://127.0.0.1:8080/sum?values=5,10,15"
+curl -fsS http://127.0.0.1:8080/api/config
+docker inspect --format '{{.State.Health.Status}}' support-agent-manual
+docker exec support-agent-manual id
 ```
 
-Open <http://127.0.0.1:8080/ui>. `-d` detaches; `--name` names this instance;
-`-p` means host IP : host port : container port; `-e` supplies public configuration.
-The Gunicorn bind is inside the container. Host localhost and container
-localhost are not the same network namespace.
+Set `SPECIALIST_API_TOKEN` in your shell first; do not put a real token in the
+Dockerfile or commit it. The `-p` order is host IP:host port:container port.
+The container should run with uid 10001. A running container may still be
+starting or unhealthy; inspect `docker logs support-agent-manual`.
 
 ```bash
-docker ps --filter name=mmaug-launchpad-manual
-docker logs mmaug-launchpad-manual
-docker inspect --format '{{.State.Health.Status}}' mmaug-launchpad-manual
-docker inspect --format '{{json .State.Health}}' mmaug-launchpad-manual
-docker exec mmaug-launchpad-manual id
-docker stats --no-stream mmaug-launchpad-manual
+docker stop support-agent-manual
+docker rm support-agent-manual
 ```
 
-Wait for `healthy` and verify uid 10001. A running container may still be
-unready. Docker records unhealthy status; it does not auto-restart solely
-because of the health check.
+Removing a container does not remove a separately named volume or image. Inspect
+objects before removing only those created for this lab; avoid broad prune
+commands.
+
+## Compose
+
+`support-agent/compose.yaml` builds from the current folder, runs the same
+image, binds only to `127.0.0.1:8090`, and passes the specialist token from the
+environment. Its named `support-data` volume persists `/data`.
 
 ```bash
-docker stop mmaug-launchpad-manual
-docker start mmaug-launchpad-manual
-docker stop mmaug-launchpad-manual
-docker rm mmaug-launchpad-manual
-```
-
-`start` reuses a stopped container, whereas `run` creates another one.
-Keep the image for the Terraform lab. Do not run broad `docker system prune`.
-
-## Compose comparison
-
-```bash
-docker compose config
-docker compose -p mmaug-launchpad-lab up -d --build
+cd support-agent
+export SPECIALIST_API_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+# Avoid printing resolved Compose configuration: it contains the token.
+docker compose up -d --build
 curl -fsS http://127.0.0.1:8090/health
-docker compose -p mmaug-launchpad-lab logs
-docker compose -p mmaug-launchpad-lab down
+docker compose logs
+docker compose down
 ```
 
-The supplied YAML defines one service, its image/build, public greeting and host
-port 8090. Project naming scopes resources. `down` removes that project's
-container/network, not its image by default. Do not have Compose and Terraform
-independently own the same container.
+`down` removes Compose containers/network, but preserves named volumes unless
+`--volumes` is requested. Do not let Compose and Terraform manage the same
+container independently.
 
-## Persistent data and networks
+## Local Docker-provider Terraform lab
 
-The app is stateless. Container writable-layer files disappear on removal;
-named volumes/bind mounts persist independently according to their lifecycle.
-Do not edit production source inside a running container. Edit, test, rebuild,
-release and replace. User-defined networks let containers reach one another by
-service names; they do not make every port public. No database/volume is needed here.
-
-Useful read-only inspection commands, while the manual container exists:
+The small root at `support-agent/terraform` manages a local Docker image
+reference, container, localhost port and named data volume. Build the image
+first from `support-agent/`, then supply the sensitive token through an
+environment variable (never a committed `.tfvars` file):
 
 ```bash
-docker network ls
-docker volume ls
-docker port mmaug-launchpad-manual
-docker inspect --format '{{json .NetworkSettings.Networks}}' mmaug-launchpad-manual
-docker image history mmaug-launchpad:1.0
+cd support-agent
+docker build -t mmaug-support-agent:1.0 .
+export SPECIALIST_API_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export TF_VAR_specialist_token="$SPECIALIST_API_TOKEN"
+cd terraform
+terraform init
+terraform fmt -check
+terraform validate
+terraform plan -out=local.tfplan
+# Review the resources and bind address before applying.
+terraform apply local.tfplan
+terraform output -raw app_url
+curl -fsS http://127.0.0.1:8080/health
+terraform plan -destroy -out=local-cleanup.tfplan
+# Review that only this local lab is managed.
+terraform apply local-cleanup.tfplan
+unset TF_VAR_specialist_token SPECIALIST_API_TOKEN
 ```
 
-`network ls` and `volume ls` show existing objects without deleting or changing
-them. `port` confirms publishing; network inspection shows the instance's
-network attachment; image history describes build layers. Do not infer that
-a named volume has a backup merely because it appears in the list.
-
-## Registry handoff in Azure
-
-After provisioning ACR and granting the publishing identity `AcrPush`:
-
-```bash
-az acr login --name "$ACR_NAME"
-ACR_LOGIN_SERVER=$(az acr show --name "$ACR_NAME" --query loginServer -o tsv)
-docker build --platform linux/amd64 -t "$ACR_LOGIN_SERVER/launchpad:bootstrap" .
-docker push "$ACR_LOGIN_SERVER/launchpad:bootstrap"
-```
-
-The explicit platform matches the demo VM's amd64 architecture, even if built
-from an ARM laptop. Pipelines publish unique release tags and deploy the same
-image digest to both targets. Runtime identities use `AcrPull`, not admin passwords.
+Terraform marking the token sensitive masks normal CLI output; it does not
+remove it from Terraform state. Protect state and do not publish it. The lab's
+image is retained locally; remove it only when no longer needed.
 
 ## Troubleshooting by layer
 
-| Symptom | Check / correction |
-|---|---|
-| Cannot connect to daemon | Start chosen Docker runtime; `docker info`; inspect active context. |
-| Name already used | Inspect only your named lab container before removing it. |
-| Port allocated | Identify the owner or deliberately choose another host port. |
-| Connection refused | Publishing configuration, Gunicorn bind and application logs. |
-| Unhealthy | Inspect health probe output; keep internal 8000 for this lab. |
-| HTTP 400 | Network worked; fix input contract, not Docker. |
-| Image pull denied | Local image absent or registry identity lacks correct pull role. |
-| exec format error | Build/pull an image compatible with the host CPU architecture. |
+| Symptom | Check |
+| --- | --- |
+| Cannot connect to daemon | Start Docker Desktop; inspect `docker info` and context. |
+| Name already used | Inspect the named lab container before removing it. |
+| Port allocated | Identify the owner or select another host port. |
+| HTTP connection refused | Check port mapping, container logs and health. |
+| Specialist console unavailable | Confirm a valid token was supplied at runtime. |
+| Image architecture error | Build for a platform supported by the host/target. |
+| Azure image pull denied | Check App Service managed identity and ACR `AcrPull`. |
 
 References: [Docker get started](https://docs.docker.com/get-started/),
 [Dockerfile reference](https://docs.docker.com/reference/dockerfile/),
-[Compose](https://docs.docker.com/compose/),
-[ACR managed identity](https://learn.microsoft.com/azure/container-registry/container-registry-authentication-managed-identity).
+[Compose](https://docs.docker.com/compose/).

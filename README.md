@@ -1,152 +1,206 @@
-# MMAUG Bootcamp 2026: Python, Docker, Terraform, Cloud Architecture & CI/CD Pipelines
+# MMAUG Bootcamp 2026: Customer Support Agent
 
-**27 October: Advanced Cloud Architecture & DevOps CI/CD Pipeline Process**,
-building on the **17 October Python, Docker & Terraform fundamentals**.
+**27 October 2026: Cloud Architecture and DevOps CI/CD**, building on the
+17 October Python, Docker and Terraform foundations.
 
-Public repository:
-[mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines](https://github.com/imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines).
+Customers submit queries in React. The Flask backend triages them, drafts a
+knowledge-grounded answer and assigns a human specialist. Specialists edit,
+approve or reassign; customers see only the approved response in the portal.
+Billing routes to Aye Chan, technical to Min Thu, account to Su Mon and general
+to Kyaw Zin.
 
-One shared participant repository for two connected sessions:
+## Architecture
 
-| Date | Session | Learning path |
-| --- | --- | --- |
-| **17 October 2026** | **Python, Docker & Terraform IaC Fundamentals for Beginners** | Understand and test the app, package it, and learn the Terraform workflow. A short CI/CD handoff overview only; no DevSecOps workshop. |
-| **27 October 2026** | **Advanced Cloud Architecture & DevOps CI/CD Pipeline Process** | Azure architecture, advanced GitHub Actions/Azure DevOps delivery, federated identities, approvals, verification, recovery and the DevSecOps/CodeQL workshop. |
+All cloud resources belong to the **existing `RG-MMAUG-Bootcamp`** resource group.
+Terraform reads that group; it must not create or destroy it. The frontend and
+backend are **two separate App Service web apps**, with no VM deployment.
 
-The hands-on journey follows one Python web application from local execution
-through Docker packaging to Terraform-managed resources and Azure delivery.
-Both dates use this renamed repository and the same application; there is no
-separate October 27 copy of the Python app.
-
-## Choose your session
-
-### 17 October: build the foundations
-
-Start with [setup](docs/00-start-here.md), [Python](docs/01-python-explained.md)
-and [Docker](docs/02-docker.md), then the local Docker Terraform exercise in
-the [Terraform guide](docs/03-terraform-azure.md). Explain modules, state and
-the purpose of automation without requiring pipeline or scanner configuration.
-
-The checkpoint is a tested app running locally, in Docker and under Terraform
-control, followed by scoped cleanup. A short "tests -> image -> deployment"
-overview can bridge to the next session. Detailed pipeline configuration,
-federation, release approvals and **all DevSecOps/CodeQL exercises belong to
-27 October**, not the October 17 lab.
-
-### 27 October: advanced CI/CD and DevSecOps workshop
-
-Carry forward the tested `launchpad-lab` app and its container contract:
-
-1. Compare App Service and VM/Nginx hosting responsibilities using the
-   [Azure architecture and Terraform modules](docs/03-terraform-azure.md).
-2. Examine state ownership, Azure Blob backend migration, locking and import.
-3. Configure federated identities, review permissions and trace the same image
-   digest through [GitHub Actions and Azure DevOps](docs/04-pipelines.md).
-4. Run the [DevSecOps and CodeQL workshop](docs/05-devsecops-codeql.md):
-   review both language jobs, triage alerts, distinguish checks from security
-   gates, and define the evidence required for release approval.
-5. Run the offline deployment regression scenarios, approve a reviewed release,
-   verify both public targets, and discuss partial failures and deliberate
-   rollback using a known-good digest.
-6. Review missing production controls and cleanup/cost responsibilities.
-7. Optionally demonstrate [Foundry agents and Azure OpenAI](docs/06-foundry-demo.md):
-   provision the opt-in AI extension, compare both SDK calls, build locally with
-   Docker Desktop, push to ACR and run the image in App Service using managed identity.
-
-These are learning paths through the existing materials, not a claim that
-additional production controls are already implemented. The current VM remains
-an HTTP-only teaching target, and CodeQL is standalone scanning, not an
-automatic alerts-based release gate.
-
-## Reading routes
-
-| Material | 17 October | 27 October |
-| --- | --- | --- |
-| [Setup and command reference](docs/00-start-here.md) | Start here; follow the foundations sequence | Refresh local checks; follow the advanced sequence |
-| [Python: every source file explained](docs/01-python-explained.md) | Core lab | Prerequisite/reference |
-| [Docker: recipe, runtime, commands and troubleshooting](docs/02-docker.md) | Core lab | Image/runtime prerequisite |
-| [Terraform: modules, local state, Azure Blob migration and import](docs/03-terraform-azure.md) | Local workflow and IaC concepts | Azure architecture and collaborative state workflow |
-| [GitHub Actions and Azure DevOps delivery](docs/04-pipelines.md) | Optional reference, not a configuration lab | Advanced delivery workshop |
-| [DevSecOps and CodeQL setup](docs/05-devsecops-codeql.md) | Reserved for the next session | DevSecOps workshop |
-| [Foundry agent, Azure OpenAI and local Docker-to-ACR demo](docs/06-foundry-demo.md) | Optional instructor reference | Paid opt-in AI application extension |
-| [Participant slide PDF: October 17 and 27](docs/MMAUG_Python_docker_terraform_Fundamentals_Participant.pdf) | Foundations slides | Advanced delivery, cloud-init, CodeQL and optional AI walkthroughs |
-
-The shared slide pack includes both sessions. Its detailed CI/CD and DevSecOps slides
-are reference material for October 27, not requirements to cover on October 17.
-The session split changes the teaching order, **not** workflow triggers:
-repository CI and CodeQL scanning remain enabled before and between sessions.
-
-Successful pushes to `main` now hand off from CI to CD in both pipeline
-definitions. Configure the required environment approvals, federation and
-variables **before enabling these releases**; pull requests stay test-only.
-Use only one release orchestrator against the shared Azure targets.
-See the [delivery setup and execution order](docs/04-pipelines.md).
-
-## Repository map
-
-```text
-launchpad-lab/       Python web app, tests, Dockerfile, Compose, local Docker IaC
-infra/azure/        Azure root module plus reusable web and vm child modules
-infra/import/       Isolated resource-group import exercise
-scripts/            Backend bootstrap and shared deployment scripts
-.github/workflows/  CI-to-CD handoff, CodeQL and approval-gated Azure deployment
-pipelines/          Azure DevOps Test -> Build -> approval -> Deploy
-tests/              Offline deployment-script regression scenarios
-docs/               Participant PDF and public technical walkthroughs
+```mermaid
+flowchart TB
+    customer["Customer / specialist browser"]
+    github["GitHub Actions<br/>OIDC: mmaug_bootcamp_spn_2026<br/>environment: dev"]
+    subgraph rg["Existing RG-MMAUG-Bootcamp"]
+        subgraph plan["Linux App Service plan"]
+            frontend["Frontend Web App<br/>React + Node static server / API proxy"]
+            backend["Backend Web App<br/>Flask + Gunicorn"]
+        end
+        acr["Azure Container Registry<br/>backend + frontend image digests"]
+        subgraph storage["Bootstrap storage account: Entra-only"]
+            state[("tfstate<br/>Terraform state / locking")]
+            knowledge[("knowledge<br/>Markdown knowledge source")]
+            tickets[("tickets<br/>Ticket JSON / ETags")]
+        end
+        search["Azure AI Search / Foundry IQ<br/>Blob indexing and knowledge retrieval"]
+        foundry["Foundry project<br/>Model + human-reviewed drafting agent"]
+    end
+    customer -->|HTTPS| frontend
+    frontend -->|Same-origin API proxy over HTTPS| backend
+    acr -->|Managed identity AcrPull| frontend
+    acr -->|Managed identity AcrPull| backend
+    backend -->|Managed identity read/write| tickets
+    backend -->|Knowledge preview / offline fallback source| knowledge
+    knowledge -->|Managed identity ingestion| search
+    foundry -->|Indexed knowledge retrieval| search
+    backend -->|Agent invocation| foundry
+    github -->|Bootstrap before init| storage
+    github -->|Terraform plan / reviewed apply| plan
+    github -->|Terraform remote backend| state
+    github -->|Push two images / deploy digests| acr
 ```
 
-The API responds at `/`, `/health`, and `/sum?values=5,10,15`. Open `/ui` for
-the interactive web page. The calculation remains the same locally, in Docker,
-in App Service, and on the Nginx-backed Linux VM.
+The source knowledge is in [support-agent/knowledge](support-agent/knowledge).
+Search indexing and agent grounding are separate from ticket storage.
+The state container is never granted to either application identity.
+See [architecture details](docs/architecture.md).
 
-The container uses Flask and Gunicorn instead of exposing a teaching HTTP
-server to Azure. Python's local `app.run` is for development only.
-Optional `POST /ai/model` and `POST /ai/agent` routes require a private demo
-bearer token and configured Azure access. The local-only `.env-local` has
-placeholders; commit only `.env-local.example`. AI resources remain disabled
-in Terraform until `enable_foundry = true`. The unchanged local routes and
-offline tests do not need an Azure subscription.
-The VM exposes **HTTP only** for a short non-sensitive demo; add a domain,
-TLS and proper access controls before real use. No public SSH ingress is opened.
+## Run locally without Azure
 
-## Prerequisites
-
-Python 3.10+, Docker with a running Linux-container daemon, Terraform 1.5+ and
-below 2.0, Git, curl and (for Azure) Azure CLI. Bash/zsh commands are primary;
-Windows instructions are in the setup guide. Azure exercises are instructor-led
-extensions, not prerequisites for the local labs.
-
-## What is safe to publish
-
-Application code, tests, example configuration, provider lock files, workflows
-and participant documentation belong here. Never commit `.env`, keys, tokens,
-actual `terraform.tfvars`, backend state, plan files or provider downloads.
-Keep `.env-local` local and commit only `.env-local.example`. Inspect `git status`
-before committing. This repository deliberately has no cloud credentials.
-
-## Validation and limitations
-
-Python unit and real HTTP tests, Terraform validation, pipeline/static checks
-and presentation validation are performed locally. A live Azure deployment
-requires the subscription, roles, identities, named pipeline environments and
-variables described in the guides. No Azure resources are provisioned merely
-by cloning this repository or opening the slides.
-
-Run offline deployment checks from the repository root:
+Requirements: Python 3.10+, Node.js 22+, npm and curl.
+Commands start at this repository root.
 
 ```bash
-bash tests/test-deploy.sh
+(cd support-agent/frontend && npm ci && npm run build)
+# Create only when absent; reuse a working backend environment.
+python3 -m venv support-agent/backend/.venv
+support-agent/backend/.venv/bin/pip install -r support-agent/backend/requirements.txt
+cd support-agent/backend
+export AI_MODE=off STORAGE_ACCOUNT_URL='' AZURE_STORAGE_CONNECTION_STRING=''
+export SPECIALIST_API_TOKEN="$(.venv/bin/python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+.venv/bin/python app.py
 ```
 
-These mocked checks verify deployment logic without calling real Azure,
-Docker or public endpoints. They do not replace a live Azure rehearsal.
+Open `http://127.0.0.1:8000/` for the customer portal and
+`http://127.0.0.1:8000/#/specialist` for the console. Enter the token privately.
+Ctrl+C stops the development server. No paid AI is used in this mode.
+The empty storage settings override cloud values in the local environment file.
+Local data persists under `support-agent/backend/.data`.
 
-**Azure exercises incur costs.** Do not provision resources until you have read
-the prerequisites, reviewed the plan and understood the cleanup instructions.
-App Service B1, the VM, disk, public IP, ACR and state storage can all incur
-costs. No exact cost is promised; check regional pricing, capacity and quotas.
-Stopping the web app does not stop its plan's billing. Destroy demo resources
-before deleting their remote state storage.
-Reusing this repository on October 27 does **not** require leaving paid demo
-resources running between sessions. Preserve source and approved configuration,
-follow the cleanup order, and provision again only when needed.
+For frontend hot reload, keep Flask on port 8000 and in another terminal run:
+
+```bash
+cd support-agent/frontend
+npm run dev -- --host 127.0.0.1
+```
+
+Vite prints its URL, normally `http://127.0.0.1:5173`. It proxies API calls to
+Flask. For a **two-container local rehearsal** matching the cloud split:
+
+```bash
+export SPECIALIST_API_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+docker compose -f support-agent/compose.split.yaml up --build -d
+curl -fsS http://127.0.0.1:8090/health
+# Customer portal / specialist console: http://127.0.0.1:8090/
+docker compose -f support-agent/compose.split.yaml down
+```
+
+This preserves the named data volume. Do not add `-v` unless ticket deletion is
+intended. The original single-container Compose and local Docker Terraform lab
+remain available for the foundations exercise.
+
+## Deploy infrastructure through GitHub Actions
+
+[infra.yml](.github/workflows/infra.yml) uses the existing federated identity and
+GitHub environment **`dev`**. No client secret is required. An administrator must
+prepare role assignments and environment protections before a live run.
+No workflow grants itself additional permissions.
+
+1. Verify the OIDC subject for this repository's `dev` environment. The existing
+   credential includes immutable owner/repository IDs; do not replace it with a
+   guessed subject string. GitHub CLI account: `imohweb`.
+2. Configure the `dev` variables required by the workflow, including
+   `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
+   `AZURE_RESOURCE_GROUP=RG-MMAUG-Bootcamp`, a globally unique storage account
+   name and a unique resource prefix. See [skills.md](skills.md) for the runbook.
+3. Add required reviewers and branch restrictions to `dev`. At inspection time
+   it had **no protection rules or variables/secrets configured**.
+4. Review the workflow and its plan/apply inputs before dispatch. Bootstrap
+   creates/reuses the storage account and three private containers **before**
+   Terraform initialization. The state uses Entra ID/OIDC, not account keys.
+5. Review the saved Terraform plan. Apply only the reviewed plan through the
+   workflow's approval boundary. This provisions the shared App Service plan,
+   two web apps, ACR, Foundry resources and Search integration.
+6. Index the uploaded knowledge and check successful ingestion before releasing
+   the application. Do not treat an empty index as a successful AI deployment.
+
+### Required Azure permissions
+
+The existing SP has **Contributor on `RG-MMAUG-Bootcamp`**. That permits resource
+management there but not RBAC assignments or Blob data access. An authorized
+administrator must additionally grant the needed permissions:
+
+- Scoped **Role Based Access Control Administrator** (or an equivalent,
+  preferably constrained role) for Terraform's role assignments within this RG.
+- **Storage Blob Data Contributor** for bootstrap/state access, scoped to the
+  account once it exists; bootstrap of a new account needs an explicitly
+  approved inheritance scope or a separate privileged bootstrap.
+- Search/Foundry data-plane roles as required by the indexing/agent setup.
+
+Do not grant subscription Owner merely to bypass missing prerequisites.
+The existing RG and bootstrapped state storage are outside Terraform destroy
+ownership. **Earlier local state must be reviewed and migrated before first
+pipeline use**; never start from empty remote state over existing resources.
+
+## Deploy the application to the cloud
+
+[CI](.github/workflows/ci.yml) runs backend, React, proxy, container and Terraform
+checks. Successful pushes to `main` call [deployment](.github/workflows/deploy.yml)
+using environment `dev`. Releases build two targets from the
+[Dockerfile](support-agent/Dockerfile):
+
+- `backend` -> ACR repository `support-agent-backend`
+- `frontend` -> ACR repository `support-agent-frontend`
+
+Set `ACR_NAME`, `BACKEND_WEB_APP_NAME`, `FRONTEND_WEB_APP_NAME` and the Azure
+login/subscription/resource group variables from infrastructure outputs.
+Set **`SPECIALIST_API_TOKEN` as an environment secret**, random and 32+ characters.
+The frontend uses `BACKEND_ORIGIN` to proxy `/api` and `/health` to the backend;
+no browser cross-origin token handling is needed.
+
+The shared [deployment script](scripts/deploy-azure.sh) deploys immutable digests
+to both apps, verifies backend and proxied frontend API contracts, checks
+authenticated knowledge access and verifies the React shell. Finish with a
+synthetic ticket: submit, inspect grounding, approve, and confirm the exact reply.
+
+[Azure Pipelines](pipelines/azure-pipelines.yml) remains an alternative
+**application** release path, not a second infrastructure owner. Configure its
+WIF service connection and variable group separately; GitHub federation does
+not authenticate Azure DevOps. Run only one orchestrator against a target.
+
+## Tests and reusable instructions
+
+```bash
+(cd support-agent/backend && .venv/bin/python -m unittest -v)
+(cd support-agent/frontend && npm test && npm run build && node --test server.test.mjs)
+bash tests/test-deploy.sh
+bash tests/test-bootstrap-state.sh
+```
+
+Read [skills.md](skills.md) for standardized agent/audience instructions:
+local startup, cloud deployment, permission boundaries, state ownership and
+validation. [AGENT.md](AGENT.md) is the compatibility entry point.
+
+| Material | Purpose |
+| --- | --- |
+| [Setup](docs/00-start-here.md) | Local foundations |
+| [Code walkthrough](docs/01-python-explained.md) | Ticket lifecycle and application modules |
+| [Docker](docs/02-docker.md) | Packaging and the local Terraform lab |
+| [Terraform](docs/03-terraform-azure.md) | Infrastructure ownership and remote state |
+| [Pipelines](docs/04-pipelines.md) | OIDC, infrastructure and application release |
+| [DevSecOps](docs/05-devsecops-codeql.md) | CodeQL and security controls |
+| [Foundry](docs/06-foundry-demo.md) | Indexed knowledge and drafting modes |
+| [Participant PDF](docs/MMAUG_Python_docker_terraform_Fundamentals_Participant.pdf) | Workshop slides |
+
+## Limits, costs and cleanup
+
+This remains a teaching solution: shared specialist token, public backend
+endpoint, no public ticket rate limit, portal-only delivery, no private
+networking and no per-user customer sign-in. AI failures use the explicit
+template fallback; a fallback response does not prove Search or the model works.
+Foundry IQ preview features may have region/model/API constraints.
+
+App Service plan, ACR, Storage, Search and model usage incur charges. Stopping
+the apps does not stop plan/Search billing. Never delete the shared resource
+group or remote-state storage as a shortcut. Review a destroy plan, preserve
+state until owned resources are gone, and clean bootstrapped storage separately
+only when explicitly approved. Never commit credentials, `.env-local`, state,
+plan files, ticket data or real environment values in `dev.tfvars`.

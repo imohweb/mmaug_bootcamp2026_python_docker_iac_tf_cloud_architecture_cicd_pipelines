@@ -1,0 +1,30 @@
+services:
+  backend:
+    build:
+      context: .
+      target: backend
+    image: mmaug-support-agent-backend:1.0
+    environment:
+      AI_MODE: "off"
+      SPECIALIST_API_TOKEN: ${SPECIALIST_API_TOKEN:?Export a random specialist token first}
+    volumes:
+      - support-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  frontend:
+    build:
+      context: .
+      target: frontend
+    image: mmaug-support-agent-frontend:1.0
+    environment:
+      BACKEND_ORIGIN: http://backend:8000
+    ports:
+      - "127.0.0.1:8090:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+volumes:
+  support-data:

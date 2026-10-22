@@ -1,0 +1,17 @@
+name: MMAUG support agent CodeQL config
+
+# security-extended adds lower-precision security queries (XSS, path injection, etc.).
+queries:
+  - uses: security-extended
+
+paths:
+  - support-agent
+  - scripts
+  - .github/workflows
+
+paths-ignore:
+  - '**/node_modules'
+  - '**/dist'
+  - '**/.venv'
+  - '**/test_*.py'
+  - '**/*.test.jsx'
