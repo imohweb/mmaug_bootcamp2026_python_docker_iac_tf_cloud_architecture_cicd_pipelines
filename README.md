@@ -122,6 +122,14 @@ No workflow grants itself additional permissions.
 6. Index the uploaded knowledge and check successful ingestion before releasing
    the application. Do not treat an empty index as a successful AI deployment.
 
+The infrastructure defaults to **`gpt-6.1-sol`**, version **`2026-09-29`**,
+deployed as `demo-model` (`GlobalStandard`, capacity 10, Foundry region `eastus2`).
+The model is selected in [variables.tf](infra/azure/variables.tf) and provisioned
+by [foundry.tf](infra/azure/foundry.tf). See
+[where the model is configured and called](docs/06-foundry-demo.md#where-the-model-is-configured-and-called)
+for the agent and backend call sites. Check regional model/IQ support and quota
+before apply; application pipelines do not provision models.
+
 ### Required Azure permissions
 
 The existing SP has **Contributor on `RG-MMAUG-Bootcamp`**. That permits resource
@@ -143,8 +151,9 @@ pipeline use**; never start from empty remote state over existing resources.
 ## Deploy the application to the cloud
 
 [CI](.github/workflows/ci.yml) runs backend, React, proxy, container and Terraform
-checks. Successful pushes to `main` call [deployment](.github/workflows/deploy.yml)
-using environment `dev`. Releases build two targets from the
+checks only; pushes and pull requests do not deploy. Manually run
+[deployment](.github/workflows/deploy.yml) on `main` after reviewing successful
+CI and authorizing the release, using environment `dev`. Releases build two targets from the
 [Dockerfile](support-agent/Dockerfile):
 
 - `backend` -> ACR repository `support-agent-backend`

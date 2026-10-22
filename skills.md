@@ -198,10 +198,12 @@ separately if using that alternative.
 
 ## 9. Application release procedure
 
-Pushes to `main` can trigger automatic application release after successful CI.
-Do not push merely to test a document. Manual dispatch of
-[deploy.yml](.github/workflows/deploy.yml) also needs release authorization and
-reviewed CI evidence for that commit.
+GitHub pushes and pull requests run CI only, not deployment. Manually dispatch
+[deploy.yml](.github/workflows/deploy.yml) on `main` only with release authorization
+and reviewed successful CI evidence for that commit. Configure the `dev`
+variables and secret first; OIDC needs client, tenant and subscription IDs but
+no client secret. `SERVICE_PRINCIPAL` in Azure login logs does not mean
+secret-based authentication.
 
 The release builds two images with the same source commit, pushes unique tags,
 resolves immutable digests and calls [deploy-azure.sh](scripts/deploy-azure.sh).

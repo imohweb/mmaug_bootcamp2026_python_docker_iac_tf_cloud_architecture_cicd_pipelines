@@ -30,8 +30,9 @@ See the actual workflow for current input and variable names.
 
 [ci.yml](../.github/workflows/ci.yml) tests Python, React and the Node API proxy,
 builds images and smoke-tests the split topology, validates Terraform and runs
-offline deployment tests. PRs do not deploy. Successful pushes to main invoke
-[deploy.yml](../.github/workflows/deploy.yml).
+offline deployment tests. Pushes and PRs do not deploy. After reviewing successful
+CI for the commit and obtaining release authorization, manually dispatch
+[deploy.yml](../.github/workflows/deploy.yml) on `main`.
 
 The release uses dev OIDC, builds Docker targets backend and frontend, pushes
 `support-agent-backend` and `support-agent-frontend` with unique tags, resolves
@@ -48,6 +49,9 @@ ACR_NAME, BACKEND_WEB_APP_NAME, FRONTEND_WEB_APP_NAME
 Environment secret: **SPECIALIST_API_TOKEN**, random and at least 32 characters.
 Configure infrastructure-specific storage/prefix values as named in infra.yml.
 No client secret, account key or publish profile is needed.
+Azure login's `SERVICE_PRINCIPAL` auth type also covers OIDC federation; it does
+not imply a client secret. The release validates configuration before login and
+reports missing `dev` variables explicitly.
 
 ## Azure Pipelines: application-only alternative
 
@@ -79,3 +83,7 @@ of a working index.
 CodeQL runs separately for Python, JavaScript/TypeScript and Actions. A green
 scan is not an automatic alerts-based deployment gate. Configure branch
 protections and review policies deliberately.
+
+[workflows/codeql.yml](../.github/workflows/codeql.yml) is the executable workflow.
+[codeql/codeql-config.yml](../.github/codeql/codeql-config.yml) is its referenced
+query/path configuration, not a second pipeline. Keep both files.

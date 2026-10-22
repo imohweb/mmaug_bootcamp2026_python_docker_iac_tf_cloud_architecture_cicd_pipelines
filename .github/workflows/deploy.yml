@@ -9,10 +9,10 @@
 # FRONTEND_IMAGE_REF, GITHUB_SHA, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT.
 # Configure dev required reviewers and main restrictions before live deployment.
 # Prepare infrastructure/state separately through infra.yml.
+# Manual dispatch only: CI pushes and pull requests never invoke this workflow.
 name: Deploy support agent to Azure App Service
 
 on:
-  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -70,6 +70,27 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Validate dev OIDC and release configuration
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SPECIALIST_API_TOKEN: ${{ secrets.SPECIALIST_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
+            AZURE_RESOURCE_GROUP ACR_NAME BACKEND_WEB_APP_NAME FRONTEND_WEB_APP_NAME; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Configure the $name variable in GitHub Settings > Environments > dev."
+              missing=1
+            fi
+          done
+          if [[ ${#SPECIALIST_API_TOKEN} -lt 32 || "$SPECIALIST_API_TOKEN" == REPLACE-* ]]; then
+            echo "::error::Configure SPECIALIST_API_TOKEN as a random 32+ character secret in dev."
+            missing=1
+          fi
+          if (( missing )); then exit 1; fi
       - name: Sign in without a client secret
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:

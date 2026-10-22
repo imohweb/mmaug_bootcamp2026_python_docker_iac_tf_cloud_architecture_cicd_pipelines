@@ -81,12 +81,12 @@ variable "foundry_location" {
 
 variable "model_name" {
   type    = string
-  default = "gpt-4.1-mini"
+  default = "gpt-6.1-sol"
 }
 
 variable "model_version" {
   type    = string
-  default = "2025-04-14"
+  default = "2026-09-29"
 }
 
 variable "model_deployment_name" {

@@ -1,3 +1,4 @@
+# Configuration consumed by ../workflows/codeql.yml, not an executable workflow.
 name: MMAUG support agent CodeQL config
 
 # security-extended adds lower-precision security queries (XSS, path injection, etc.).

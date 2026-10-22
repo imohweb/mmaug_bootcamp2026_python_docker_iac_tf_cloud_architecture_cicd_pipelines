@@ -1,5 +1,5 @@
 # GITHUB SETUP: CI checks need no custom environment variables or secrets.
-# Automatic main deployment calls deploy.yml and uses GitHub environment dev.
+# CI never deploys. Manually run deploy.yml using GitHub environment dev to release.
 # dev VARIABLES: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
 # AZURE_RESOURCE_GROUP=RG-MMAUG-Bootcamp, ACR_NAME,
 # BACKEND_WEB_APP_NAME, FRONTEND_WEB_APP_NAME.
@@ -119,13 +119,3 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false -input=false
       - run: terraform validate
-
-  deploy:
-    name: Approved Azure delivery
-    needs: [deployment-scripts, backend, frontend, container, terraform]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/deploy.yml
-    secrets: inherit

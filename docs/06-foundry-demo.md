@@ -122,11 +122,39 @@ mocked API responses. Run `npm test` and `npm run build` from
 (default true), `ai_mode` (`agent` or `model` when enabled), deployment name,
 model/version/SKU/capacity, region and agent name. With `enable_foundry = false`,
 Terraform sets the deployed app to `AI_MODE=off`; knowledge-template drafting
-continues. The default model example is gpt-4.1-mini with a GlobalStandard
-deployment, but model availability, regional support, capacity, quota and price
+continues. The default model is `gpt-6.1-sol`, version `2026-09-29`, with a
+`GlobalStandard` deployment named `demo-model` and capacity 10 in `eastus2`.
+Model availability, regional support, capacity, quota and price
 must be checked for the target subscription before planning any paid resources.
 The default Foundry region may differ from the App Service region; verify data
 residency requirements before choosing a global model SKU.
+
+Capacity is a rate-limit allocation, not a token purchase or output-token count.
+For `gpt-6.1-sol` / `GlobalStandard`, the `eastus2` catalog currently reports
+1 request/minute and 1,000 tokens/minute per capacity unit. Capacity 10 therefore
+allocates 10 requests/minute and 10,000 tokens/minute, not ten tokens.
+Recheck the catalog when changing model/SKU; unit ratios vary. Actual usage is
+billed separately, and per-response token limits are configured in the backend.
+
+### Where the model is configured and called
+
+- [variables.tf](../infra/azure/variables.tf) supplies the pipeline defaults;
+  [dev.tfvars](../infra/azure/dev.tfvars) supplies matching local plan examples.
+- [foundry.tf](../infra/azure/foundry.tf), resource
+  `azurerm_cognitive_deployment.model`, provisions the model using
+  `var.model_name` and `var.model_version`. Resource `terraform_data.agent`
+  passes the deployment name, not the catalog model name, to the agent bridge.
+- [manage_agent.py](../support-agent/backend/manage_agent.py), function
+  `agent_definition`, binds the prompt agent to `AZURE_OPENAI_DEPLOYMENT`.
+- [ai_client.py](../support-agent/backend/ai_client.py), function `ask_agent`,
+  invokes the agent through `client.responses.create`. Function `ask_model`
+  calls `client.chat.completions.create(model=deployment, ...)` in direct model mode.
+- [search.tf](../infra/azure/search.tf) passes the same model/deployment into
+  the Foundry IQ knowledge-base setup. Validate live IQ model compatibility
+  and grounded retrieval before treating a cloud rollout as successful.
+
+Only the approved infrastructure apply creates or updates the model.
+Application delivery pipelines deploy containers against that existing deployment.
 
 When enabled, `foundry.tf` creates the AI Services account, project and model
 deployment; assigns scoped runtime roles; then uses

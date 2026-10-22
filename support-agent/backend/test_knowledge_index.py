@@ -20,7 +20,7 @@ SETTINGS = {
     "KNOWLEDGE_CONTAINER": "knowledge",
     "AZURE_OPENAI_ENDPOINT": "https://foundry.openai.azure.com/",
     "AZURE_OPENAI_DEPLOYMENT": "support-model",
-    "AZURE_OPENAI_MODEL_NAME": "gpt-4.1-mini",
+    "AZURE_OPENAI_MODEL_NAME": "gpt-6.1-sol",
 }
 
 
@@ -44,6 +44,7 @@ class KnowledgeIndexTests(unittest.TestCase):
         kb = bodies[f"{root}/knowledgebases/support-kb"]
         self.assertEqual(kb["knowledgeSources"], [{"name": "support-source"}])
         self.assertEqual(kb["models"][0]["azureOpenAIParameters"]["deploymentId"], "support-model")
+        self.assertEqual(kb["models"][0]["azureOpenAIParameters"]["modelName"], "gpt-6.1-sol")
         datasource = bodies[f"{root}/datasources/support-policies-blob"]
         self.assertEqual(datasource["credentials"]["connectionString"],
                          f"ResourceId={SETTINGS['AZURE_STORAGE_RESOURCE_ID']};")
