@@ -9,6 +9,22 @@ approve or reassign; customers see only the approved response in the portal.
 Billing routes to Aye Chan, technical to Min Thu, account to Su Mon and general
 to Kyaw Zin.
 
+| Who | Where | What they do |
+| --- | --- | --- |
+| Customer | `/` (**Get help**) | Submit a query, then track it with the ticket ID (`SUP-…`) and the private ticket key shown after submission. |
+| Specialist | `/#/specialist` (**Specialist console**) | Sign in with the specialist token, review the AI draft and its grounding, edit, approve or reassign. |
+
+The backend `AI_MODE` selects how drafts are produced:
+
+| `AI_MODE` | Drafting |
+| --- | --- |
+| `off` | Knowledge templates only; no paid AI (local default). |
+| `model` | Direct Azure OpenAI model call grounded on knowledge excerpts. |
+| `agent` | Foundry agent grounded through the Azure AI Search knowledge base (cloud default). |
+
+The four knowledge documents (billing, technical, account, general) live in
+[support-agent/knowledge](support-agent/knowledge).
+
 ## Architecture
 
 All cloud resources belong to the **existing `RG-MMAUG-Bootcamp`** resource group.
@@ -48,8 +64,12 @@ flowchart TB
     github -->|Push two images / deploy digests| acr
 ```
 
-The source knowledge is in [support-agent/knowledge](support-agent/knowledge).
 Search indexing and agent grounding are separate from ticket storage.
+Azure AI Search may run in a different region from Foundry (`SEARCH_LOCATION`)
+when the Foundry region has no Search capacity; the shared resource group's own
+region is used for the App Service plan, web apps, ACR and storage.
+The ACR admin user is disabled: both web apps pull image digests with the shared
+user-assigned identity (AcrPull), and GitHub Actions pushes with OIDC.
 The state container is never granted to either application identity.
 See [architecture details](docs/architecture.md).
 For larger, presentation-friendly diagrams of runtime, Azure resources, CI/CD
@@ -109,22 +129,45 @@ No workflow grants itself additional permissions.
 1. Verify the OIDC subject for this repository's `dev` environment. The existing
    credential includes immutable owner/repository IDs; do not replace it with a
    guessed subject string. GitHub CLI account: `imohweb`.
-2. Configure the `dev` variables required by the workflow, including
-   `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
-   `AZURE_RESOURCE_GROUP=RG-MMAUG-Bootcamp`, a globally unique storage account
-   name, a unique resource prefix, and `WEB_IDENTITY_RESOURCE_ID` for the
-   existing user-assigned identity attached to both web apps.
+2. Configure the `dev` environment variables (see the table below).
    See [skills.md](skills.md) for the runbook.
-3. Add required reviewers and branch restrictions to `dev`. At inspection time
-   it had **no protection rules or variables/secrets configured**.
+3. Add required reviewers and a main-only branch restriction to `dev`. Every
+   `dev` job (plan, apply, release) then waits for reviewer approval.
 4. Review the workflow and its plan/apply inputs before dispatch. Bootstrap
    creates/reuses the storage account and three private containers **before**
    Terraform initialization. The state uses Entra ID/OIDC, not account keys.
 5. Review the saved Terraform plan. Apply only the reviewed plan through the
    workflow's approval boundary. This provisions the shared App Service plan,
    two web apps, ACR, Foundry resources and Search integration.
-6. Index the uploaded knowledge and check successful ingestion before releasing
-   the application. Do not treat an empty index as a successful AI deployment.
+6. During apply, Terraform uploads the knowledge files and runs two bridge
+   scripts: [setup_knowledge_index.py](support-agent/backend/setup_knowledge_index.py)
+   (index, blob knowledge source and indexer, knowledge base and project MCP
+   connection) and [manage_agent.py](support-agent/backend/manage_agent.py)
+   (Foundry agent). In GitHub Actions they authenticate through
+   [provisioning_credential.py](support-agent/backend/provisioning_credential.py),
+   which requests a fresh GitHub OIDC assertion for every token exchange, so
+   long applies (Search creation can take ~10 minutes) do not fail on an expired
+   login assertion.
+7. Check that the indexer succeeded and the index holds documents before
+   releasing the application. Do not treat an empty index as a successful AI
+   deployment. Index statistics can lag; a direct search query shows the true
+   document count.
+
+| `dev` variable / secret | Used by | Value |
+| --- | --- | --- |
+| `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | all Azure workflows | OIDC deployment SP and target subscription |
+| `AZURE_RESOURCE_GROUP` | all Azure workflows | `RG-MMAUG-Bootcamp` (existing) |
+| `STATE_ACCOUNT` | infra | Globally unique storage account for state, knowledge and tickets |
+| `RESOURCE_PREFIX` | infra | 6-18 lowercase letters/digits, starting with a letter |
+| `WEB_IDENTITY_RESOURCE_ID` | infra | Existing user-assigned identity for both web apps |
+| `FOUNDRY_LOCATION` | infra (optional) | Foundry/model region; default `eastus2` |
+| `SEARCH_LOCATION` | infra (optional) | Azure AI Search region; defaults to `FOUNDRY_LOCATION` |
+| `ACR_NAME`, `BACKEND_WEB_APP_NAME`, `FRONTEND_WEB_APP_NAME` | deploy | Terraform outputs `acr_name`, `backend_web_app_name`, `frontend_web_app_name` |
+| `SPECIALIST_API_TOKEN` (**secret**) | deploy, CI | Random, 32+ characters; the specialist console sign-in token |
+
+No client secret, ACR admin credential or `CORS_ORIGIN` setting is needed: the
+frontend proxies `/api` and `/health` to the backend on the same origin, and
+the application does not read `CORS_ORIGIN`.
 
 For a completed plan-only run, its dispatch inputs cannot be changed.
 [apply-reviewed-plan.yml](.github/workflows/apply-reviewed-plan.yml) provides a
@@ -141,12 +184,20 @@ than trigger an automatic re-plan; a new plan needs a new review. This workflow
 does not release either application.
 
 The infrastructure defaults to **`gpt-6.1-sol`**, version **`2026-09-29`**,
-deployed as `demo-model` (`GlobalStandard`, capacity 10, Foundry region `eastus2`).
+deployed as `demo-model` (`GlobalStandard`, capacity 10). The Foundry region
+defaults to `eastus2` and is overridden by `FOUNDRY_LOCATION`.
 The model is selected in [variables.tf](infra/azure/variables.tf) and provisioned
-by [foundry.tf](infra/azure/foundry.tf). See
-[where the model is configured and called](docs/06-foundry-demo.md#where-the-model-is-configured-and-called)
+by [foundry.tf](infra/azure/foundry.tf); Search is in [search.tf](infra/azure/search.tf).
+See [where the model is configured and called](docs/06-foundry-demo.md#where-the-model-is-configured-and-called)
 for the agent and backend call sites. Check regional model/IQ support and quota
 before apply; application pipelines do not provision models.
+
+> **Known limitation:** the Azure AI Search knowledge base accepts only a
+> limited set of planner models, and `gpt-6.1-sol` is not one of them. If
+> `setup_knowledge_index.py` fails at the knowledge-base step, create the
+> knowledge base without a model, using `retrievalReasoningEffort: minimal` and
+> `outputMode: extractiveData`. The agent still uses `gpt-6.1-sol` for drafting.
+> Alternatively, set a supported planner model for the knowledge base.
 
 ### Required Azure permissions
 
@@ -217,10 +268,33 @@ Set **`SPECIALIST_API_TOKEN` as an environment secret**, random and 32+ characte
 The frontend uses `BACKEND_ORIGIN` to proxy `/api` and `/health` to the backend;
 no browser cross-origin token handling is needed.
 
-The shared [deployment script](scripts/deploy-azure.sh) deploys immutable digests
-to both apps, verifies backend and proxied frontend API contracts, checks
-authenticated knowledge access and verifies the React shell. Finish with a
-synthetic ticket: submit, inspect grounding, approve, and confirm the exact reply.
+The shared [deployment script](scripts/deploy-azure.sh) sets app settings
+(including the specialist token, written from a private temp file rather than
+command arguments), then sets each app's image by digest with
+`az webapp config set --linux-fx-version` and restarts it. Pulls use the
+managed identity (`acrUseManagedIdentityCreds`). The script deliberately avoids
+`az webapp config container set`, which tries to look up ACR admin credentials.
+It then verifies backend and proxied frontend health, config and authenticated
+knowledge contracts, and the React shell. Transient request failures while a
+container restarts are retried; an invalid response contract fails the release.
+Finish with a synthetic ticket: submit, inspect grounding, approve, and confirm
+the exact reply.
+
+### Specialist sign-in token
+
+The specialist console asks for the value of `SPECIALIST_API_TOKEN`. GitHub
+secrets cannot be read back, so retrieve it privately from the backend web app
+(**Settings > Environment variables > `SPECIALIST_API_TOKEN` > Show value** in
+the Azure portal), or rotate it:
+
+```bash
+openssl rand -hex 32   # generate a new value
+gh secret set SPECIALIST_API_TOKEN --env dev   # paste when prompted
+```
+
+Then rerun the deployment workflow so the backend receives the new value. Paste
+only the raw token; the frontend adds `Bearer` and keeps it in memory only.
+Never show it on a projected screen.
 
 [Azure Pipelines](pipelines/azure-pipelines.yml) remains an alternative
 **application** release path, not a second infrastructure owner. Configure its
@@ -234,7 +308,12 @@ not authenticate Azure DevOps. Run only one orchestrator against a target.
 (cd support-agent/frontend && npm test && npm run build && node --test server.test.mjs)
 bash tests/test-deploy.sh
 bash tests/test-bootstrap-state.sh
+python3 tests/test-reviewed-plan.py
 ```
+
+[CI](.github/workflows/ci.yml) runs these on Python 3.10 and 3.12 and Node 22,
+plus Docker builds of all three targets and `terraform fmt`/`validate`.
+[CodeQL](.github/workflows/codeql.yml) scans on push, pull request and weekly.
 
 Read [skills.md](skills.md) for standardized agent/audience instructions:
 local startup, cloud deployment, permission boundaries, state ownership and
