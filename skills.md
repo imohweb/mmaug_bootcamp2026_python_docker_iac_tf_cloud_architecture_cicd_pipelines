@@ -246,3 +246,182 @@ python3 scripts/build-participant-pdf.py
 Render and inspect the PDF before sharing. Keep the limitations explicit:
 shared specialist token, no rate limiting, public endpoints and portal-only
 delivery. Do not claim live cloud verification from offline mock tests.
+
+## 11. Presentation-day GitHub Actions deployment (opt-in)
+
+Use this procedure only when the presenter explicitly asks the agent to run
+the GitHub deployment during the presentation. The target is GitHub repository
+[`imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines`](https://github.com/imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines),
+GitHub environment `dev`, and the environment settings page is
+[here](https://github.com/imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines/settings/environments/24587402017/edit).
+Today’s deployment path is GitHub Actions only. The Azure Repo is for learner
+walkthrough; do not push to it, run Azure Pipelines, or use it to deploy.
+
+Suggested presenter prompt:
+
+> Read `skills.md` and follow Section 11 for the GitHub-only presentation
+> deployment. Authenticate as `imohweb`, verify the repository and target
+> branch, align the four GitHub workflow files, and populate only verified
+> `dev` variables. Stop at every presenter pause: have me add the secret
+> directly in GitHub, review and approve the Terraform plan/apply, and approve
+> the app release. Run CI and CodeQL for the exact commit. Do not push to the
+> Azure Repo, run Azure Pipelines, or bypass any approval gate.
+
+This procedure provisions Azure resources and incurs cost. Keep the existing
+approval boundaries in Sections 1, 7 and 8. A request to prepare or explain
+this workflow is not authorization to execute it. Never print, request in chat,
+or store credentials or secret values in source, shell output, workflow logs or
+artifacts.
+
+### 11.1 Confirm GitHub identity, repository and branch
+
+1. Switch the GitHub CLI to the presenter's existing `imohweb` account and
+   verify both the authenticated login and exact repository before any edits
+   or API changes:
+
+   ```bash
+   gh auth switch --hostname github.com --user imohweb
+   gh api user --jq .login
+   gh repo view imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines --json nameWithOwner,defaultBranchRef
+   ```
+
+   Stop if the login is not `imohweb`, the repository does not match, or
+   authentication requires a password/token. Do not ask the presenter to paste
+   a credential into chat; ask them to authenticate through GitHub's supported
+   sign-in flow and retry.
+2. Inspect the checked-out branch, upstream, worktree and all four workflow
+   files. Preserve unrelated edits and never stage or commit unrelated files.
+   The default deployment branch is `main`, matching the current workflows.
+   If the presenter requests a different branch, confirm that exact branch
+   before editing and verify the GitHub environment's branch restrictions and
+   existing OIDC trust support it. Do not silently relax either protection.
+
+### 11.2 Align workflow branch selection without enabling push deployment
+
+Update and validate
+[ci.yml](.github/workflows/ci.yml),
+[deploy.yml](.github/workflows/deploy.yml),
+[infra.yml](.github/workflows/infra.yml), and
+[codeql.yml](.github/workflows/codeql.yml) consistently for the confirmed
+target branch:
+
+- CI and CodeQL `push`/`pull_request` branch filters must include the target
+  branch. Keep CodeQL's scheduled scan and manual dispatch.
+- App release and infrastructure remain `workflow_dispatch` only. Keep their
+  explicit branch guards aligned with the target branch and dispatch using
+  that branch. **Do not add `push` or `pull_request` triggers to either
+  deployment workflow.**
+- Preserve all other permissions, approval checks, state checks, and
+  concurrency controls. Do not remove the `dev` environment gate or the
+  infrastructure workflow's `state_ready` and `apply` inputs.
+- Check the YAML and diff before publishing. Do not push merely to test
+  deployment workflows. A push to the target branch can run CI and CodeQL,
+  but must never deploy infrastructure or the app automatically.
+
+### 11.3 Populate environment variables from verified sources
+
+Inspect the workflow declarations and current Terraform/configuration first.
+Use only confirmed values from the existing OIDC service principal, the
+intended Azure CLI subscription, approved naming decisions, and successful
+Terraform outputs. Never invent IDs, names, prefixes, account names, or
+replace a value just to make validation pass. Do not create an
+`AZURE_CLIENT_SECRET`; authentication is federated OIDC.
+
+Configure these as **Variables** in GitHub environment `dev` (not repository
+variables and not secrets):
+
+| Variable | Source / rule |
+| --- | --- |
+| `AZURE_CLIENT_ID` | Existing `mmaug_bootcamp_spn_2026` application/client ID used by the GitHub OIDC trust. |
+| `AZURE_TENANT_ID` | Tenant ID of the intended Azure subscription; verify with the presenter before use. |
+| `AZURE_SUBSCRIPTION_ID` | Confirmed target subscription ID; ensure Azure CLI context matches it. |
+| `AZURE_RESOURCE_GROUP` | Exactly `RG-MMAUG-Bootcamp`; it is existing and must not be created or deleted. |
+| `STATE_ACCOUNT` | Approved, globally unique 3–24 character lowercase/digit storage account name. Check availability and existing state before selecting. |
+| `RESOURCE_PREFIX` | Presenter-approved unique 6–18 character lowercase/digit prefix starting with a letter. |
+| `FOUNDRY_LOCATION` | Optional; use the approved location (current default is `eastus2`) only after availability/quota review. |
+| `ACR_NAME` | Terraform output after successful infrastructure apply. |
+| `BACKEND_WEB_APP_NAME` | Terraform output after successful infrastructure apply. |
+| `FRONTEND_WEB_APP_NAME` | Terraform output after successful infrastructure apply. |
+
+Use GitHub's environment UI or authenticated `gh variable` commands scoped to
+`dev`; do not put values in this file. For a value already verified from an
+approved source, the CLI form is:
+
+```bash
+gh variable set VARIABLE_NAME --env dev --body "$VERIFIED_VALUE" \
+  --repo imohweb/mmaug_bootcamp2026_python_docker_iac_tf_cloud_architecture_cicd_pipelines
+```
+
+Set one variable at a time and do not echo the value. Validate required names
+against both workflows. The three application outputs are not available until
+infrastructure succeeds; set and verify them before app release.
+
+### 11.4 Mandatory presenter pauses
+
+**Pause A — manual secret entry.** After the non-secret variables have been
+verified, stop and ask the presenter to add `SPECIALIST_API_TOKEN` as a
+**secret** in the `dev` environment using the settings link above. The
+presenter must generate a random value of at least 32 characters and enter it
+directly in GitHub; never generate it into chat, read it back, or ask the
+presenter to paste it here. Also ask them to configure the required `dev`
+environment reviewer and target-branch restrictions if they are absent.
+Resume only after the presenter confirms completion. Check secret *presence*
+by listing secret names or letting the workflow's non-printing validation
+check run; never retrieve or display a secret value.
+
+**Pause B — infrastructure review and authorization.** Before running the
+infrastructure workflow, show the presenter the target branch/commit,
+subscription, resource group, state account/container, whether state is
+existing or has been reconciled, and the Terraform plan's additions,
+changes, replacements, and deletions. The plan workflow bootstraps Blob Storage
+before Terraform init, so even `apply=false` can create billable storage.
+Require explicit confirmation to proceed with that side effect and a separate
+clear approval to apply the reviewed saved plan. Do not set `state_ready=true`
+unless prior state has actually been reviewed/migrated or the presenter
+confirms a reviewed new deployment. Do not dispatch apply if the plan includes
+unapproved deletion/replacement, wrong scope, missing role setup, or uncertain
+state. The GitHub environment's required reviewer must approve the protected
+apply job. Never run `terraform apply` locally as a workaround.
+
+**Pause C — application release.** After infrastructure succeeds, review the
+Terraform outputs and populate the three app-release variables. Confirm the
+exact source commit, successful CI and CodeQL results for that commit, and
+the frontend/backend deployment targets. Ask for explicit approval immediately
+before manually dispatching `deploy.yml`; do not auto-dispatch it after
+infrastructure. Deployment builds/pushes images and changes both App Services.
+
+### 11.5 Execute and verify in this order
+
+1. Confirm the four workflow files are aligned with the target branch. Commit
+   and push only the reviewed, task-related changes to the GitHub repository
+   after presenter approval. Pushing to GitHub may run CI and CodeQL; it must
+   not deploy. Do not push these changes to the Azure Repo.
+2. Run CI and CodeQL for the exact target-branch commit, using normal
+   push-triggered runs or their manual dispatch. Wait for completion and
+   inspect results. Do not continue with failing or cancelled required checks.
+3. Perform Pause A and Pause B. Run the GitHub `infra.yml` workflow on the
+   target branch with `state_ready=true` only after state review and
+   `apply=true` only after the plan review and explicit authorization. Wait
+   for the environment reviewer approval and successful Terraform apply.
+   Do not assume a successful bootstrap or plan means infrastructure applied.
+4. Populate `ACR_NAME`, `BACKEND_WEB_APP_NAME` and
+   `FRONTEND_WEB_APP_NAME` from the successful Terraform outputs. Verify every
+   required environment variable and `SPECIALIST_API_TOKEN` presence without
+   exposing the secret. Perform Pause C, then manually dispatch `deploy.yml`
+   on the target branch.
+5. Wait for the release workflow and both App Service health checks. Verify
+   the React shell and API health endpoint, then test a synthetic support
+   ticket end to end: draft remains hidden from the customer until a specialist
+   approves it, and only the approved response is returned. Do not use real
+   customer data.
+6. If a workflow fails, stop at the failing stage. Inspect the specific
+   GitHub Actions job logs and safe diagnostics; redact any accidentally
+   exposed values and never dump tokens, secrets, Terraform state or plan JSON.
+   Fix the root cause, rerun only the necessary checks, and request approval
+   again before any repeated infrastructure apply or app release. Do not
+   broaden permissions, bypass environment protection, deploy through Azure
+   Pipelines, or roll back without presenter authorization.
+
+If GitHub authentication, an OIDC trust, reviewer protection, state history,
+Azure role assignment, plan contents, deployment health, or required input is
+unclear, stop and ask the presenter. Do not guess or silently continue.
