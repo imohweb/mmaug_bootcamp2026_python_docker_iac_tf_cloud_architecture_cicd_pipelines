@@ -65,8 +65,9 @@ expect() {
   count=$((count + 1))
 }
 expect pass
-grep -q -- "--container-image-name $BACKEND_IMAGE_REF" "$MOCK_LOG"
-grep -q -- "--container-image-name $FRONTEND_IMAGE_REF" "$MOCK_LOG"
+grep -qF -- "--linux-fx-version DOCKER|$BACKEND_IMAGE_REF" "$MOCK_LOG"
+grep -qF -- "--linux-fx-version DOCKER|$FRONTEND_IMAGE_REF" "$MOCK_LOG"
+! grep -q -- "container set" "$MOCK_LOG"
 ! grep -q "$SPECIALIST_API_TOKEN" "$MOCK_LOG"
 ! grep -q 'vm run-command' "$MOCK_LOG"
 export MODE=flaky-config

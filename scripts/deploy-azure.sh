@@ -53,8 +53,10 @@ release() {
     --generic-configurations '{"acrUseManagedIdentityCreds":true}' -o none
   az webapp log config -g "$AZURE_RESOURCE_GROUP" -n "$app" \
     --docker-container-logging filesystem -o none
-  az webapp config container set -g "$AZURE_RESOURCE_GROUP" -n "$app" \
-    --container-image-name "$image" --container-registry-url "https://$ACR_NAME.azurecr.io" -o none
+  # Set the image directly: `config container set` probes for ACR admin credentials,
+  # while pulls here use the web app's managed identity (AcrPull) with admin disabled.
+  az webapp config set -g "$AZURE_RESOURCE_GROUP" -n "$app" \
+    --linux-fx-version "DOCKER|$image" -o none
   az webapp restart -g "$AZURE_RESOURCE_GROUP" -n "$app" -o none
 }
 get_json() {
