@@ -21,18 +21,6 @@ data "azurerm_storage_container" "knowledge" {
   storage_account_id = data.azurerm_storage_account.data.id
 }
 
-resource "azurerm_role_assignment" "app_tickets" {
-  scope                = data.azurerm_storage_container.tickets.id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = var.app_principal_id
-}
-
-resource "azurerm_role_assignment" "app_knowledge" {
-  scope                = data.azurerm_storage_container.knowledge.id
-  role_definition_name = "Storage Blob Data Reader"
-  principal_id         = var.app_principal_id
-}
-
 resource "azurerm_storage_blob" "knowledge" {
   for_each             = fileset(var.knowledge_dir, "*.md")
   name                 = each.value

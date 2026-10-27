@@ -20,9 +20,15 @@ It is not owned by the Terraform app root module, so destroying the workload
 cannot destroy its own backend. An earlier local deployment requires state
 migration before the first remote-state run.
 
-Contributor on the RG is not enough for Terraform RBAC or Blob data operations.
-An administrator must prepare scoped RBAC administration and data roles before
-dispatch. Scripts do not auto-escalate. Required reviewers and branch
+Terraform no longer creates role assignments. Contributor on the RG does not
+provide Blob/Search/Foundry data access or permission to attach an identity in
+another RG. Administrators own those existing permissions. Configure
+`WEB_IDENTITY_RESOURCE_ID` in `dev` for the shared web-app identity; the OIDC
+SP remains the deployment identity. Apply requires the additional explicit
+`external_access_verified=true` input after administrator verification of the
+[permission matrix](../README.md#required-azure-permissions); its default is
+false. It does not grant access or replace saved-plan approval. Plan-only runs
+are still allowed. Scripts do not auto-escalate. Required reviewers and branch
 restrictions must be configured externally on dev; OIDC alone is not approval.
 See the actual workflow for current input and variable names.
 
@@ -37,6 +43,9 @@ CI for the commit and obtaining release authorization, manually dispatch
 The release uses dev OIDC, builds Docker targets backend and frontend, pushes
 `support-agent-backend` and `support-agent-frontend` with unique tags, resolves
 both digests and deploys them through the shared script.
+Its `external_access_verified` input defaults to false and must be confirmed
+after administrator verification of existing runtime and release SP access.
+Missing confirmation fails before Azure login or pushing/deploying images.
 
 Environment variables:
 

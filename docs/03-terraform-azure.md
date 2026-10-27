@@ -21,7 +21,7 @@ read it as a data source, never create or delete it. The workload consists of:
 - ACR with managed-identity pulls and two image repositories.
 - Foundry account, project, model deployment and prompt agent.
 - Azure AI Search with indexed Blob knowledge / Foundry IQ integration.
-- Scoped managed-identity roles and knowledge/index configuration.
+- Existing administrator-owned roles and Terraform-managed knowledge/index configuration.
 
 The storage account is bootstrapped outside the workload Terraform root and
 has private `tfstate`, `knowledge` and `tickets` containers. State storage
@@ -38,9 +38,20 @@ before backend initialization, then validation/plan and an explicitly selected,
 reviewed apply. Protect the environment with reviewers/branch restrictions;
 these are external settings, not something Terraform's YAML guarantees.
 
-The existing Contributor assignment is RG-scoped. An administrator must prepare
-RBAC administration and Blob/Search/Foundry data access; bootstrap does not
-grant itself new roles. Do not broaden to subscription Owner to bypass a
+Both apps reuse the identity supplied through `web_identity_resource_id`
+(`WEB_IDENTITY_RESOURCE_ID` in `dev`). ACR pulls select its client ID, and the
+backend's `AZURE_CLIENT_ID` selects it for Azure SDK authentication. The
+deployment SP still uses its own OIDC identity; do not replace that SP's client
+ID with the runtime identity's client ID.
+
+Terraform creates no role assignments. An administrator must verify identity
+attachment, registry and Blob/Search/Foundry access for the deployment SP and
+all runtime/service identities; see the [permission matrix](../README.md#required-azure-permissions).
+The workflow refuses apply without `external_access_verified=true`; plan-only
+runs remain available. Newly created Search/project system identities require
+administrator-led provisioning/access and reviewed resource imports before
+this complete apply can proceed. Bootstrap does not grant itself new roles.
+Do not broaden to subscription Owner to bypass a
 missing prerequisite. Resource providers must already be registered when the
 SP cannot register them.
 
@@ -71,7 +82,12 @@ duplicate resources.
 1. Identify the authoritative state and stop other writers.
 2. Back it up privately. Do not print state in a workshop or CI log.
 3. Review resource addresses affected by converting RG ownership to a data
-   source, changing one web app into two and externalizing storage.
+   source, changing one web app into two and externalizing storage and roles.
+   Removed role-assignment resources must be relinquished from authoritative
+   state under administrator review without revoking the Azure grants. Never
+   apply their deletion as a side effect of this refactor. Switching existing
+   apps from system-assigned to the shared user-assigned identity also needs
+   access verification before the switch; old identity grants do not transfer.
 4. Explicitly remove shared-resource ownership from the old state only after
    review; never destroy a shared RG to resolve an address change.
 5. Import or move retained workload resources where appropriate.

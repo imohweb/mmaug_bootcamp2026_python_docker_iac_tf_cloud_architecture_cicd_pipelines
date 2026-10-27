@@ -3,6 +3,15 @@ variable "subscription_id" {
   description = "Explicit Azure subscription for this paid teaching lab."
 }
 
+variable "web_identity_resource_id" {
+  type        = string
+  description = "Existing user-assigned identity for both web apps; runtime access is administered outside Terraform."
+  validation {
+    condition     = can(regex("(?i)^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/Microsoft.ManagedIdentity/userAssignedIdentities/[^/]+$", var.web_identity_resource_id))
+    error_message = "Supply the full resource ID of an existing user-assigned managed identity."
+  }
+}
+
 variable "resource_group_name" {
   type    = string
   default = "RG-MMAUG-Bootcamp"

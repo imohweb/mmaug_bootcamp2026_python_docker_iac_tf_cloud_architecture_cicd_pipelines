@@ -28,14 +28,6 @@ variable "knowledge_dir" {
   type        = string
   description = "Folder of Markdown knowledge documents uploaded to the knowledge container."
 }
-variable "app_principal_id" {
-  type        = string
-  description = "Managed identity of the web app."
-}
-variable "deployer_principal_id" {
-  type        = string
-  description = "Object ID of the identity running Terraform."
-}
 variable "tags" {
   type    = map(string)
   default = {}

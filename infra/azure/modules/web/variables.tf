@@ -16,6 +16,12 @@ variable "registry_url" {
 variable "image_name" {
   type = string
 }
+variable "identity_id" {
+  type = string
+}
+variable "identity_client_id" {
+  type = string
+}
 variable "app_settings" {
   type        = map(string)
   default     = {}

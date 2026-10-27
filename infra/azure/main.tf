@@ -10,6 +10,17 @@ data "azurerm_resource_group" "demo" {
   name = var.resource_group_name
 }
 
+data "azurerm_user_assigned_identity" "web" {
+  name                = split("/", var.web_identity_resource_id)[8]
+  resource_group_name = split("/", var.web_identity_resource_id)[4]
+  lifecycle {
+    postcondition {
+      condition     = lower(self.id) == lower(var.web_identity_resource_id)
+      error_message = "The existing web identity must belong to the configured deployment subscription."
+    }
+  }
+}
+
 resource "azurerm_service_plan" "app" {
   name                = "${var.prefix}-plan"
   resource_group_name = data.azurerm_resource_group.demo.name
@@ -35,7 +46,10 @@ module "backend" {
   service_plan_id     = azurerm_service_plan.app.id
   registry_url        = "https://${azurerm_container_registry.app.login_server}"
   image_name          = "support-agent-backend:${var.image_tag}"
+  identity_id         = data.azurerm_user_assigned_identity.web.id
+  identity_client_id  = data.azurerm_user_assigned_identity.web.client_id
   app_settings = merge({
+    AZURE_CLIENT_ID     = data.azurerm_user_assigned_identity.web.client_id
     STORAGE_ACCOUNT_URL = trimsuffix(module.storage.blob_endpoint, "/")
     TICKETS_CONTAINER   = module.storage.tickets_container
     KNOWLEDGE_CONTAINER = module.storage.knowledge_container
@@ -58,30 +72,18 @@ module "frontend" {
   service_plan_id     = azurerm_service_plan.app.id
   registry_url        = "https://${azurerm_container_registry.app.login_server}"
   image_name          = "support-agent-frontend:${var.image_tag}"
+  identity_id         = data.azurerm_user_assigned_identity.web.id
+  identity_client_id  = data.azurerm_user_assigned_identity.web.client_id
   app_settings        = { BACKEND_ORIGIN = module.backend.url }
 }
 
 module "storage" {
-  source                = "./modules/storage"
-  name                  = var.storage_account_name
-  resource_group_name   = data.azurerm_resource_group.demo.name
-  location              = data.azurerm_resource_group.demo.location
-  knowledge_dir         = local.knowledge_dir
-  app_principal_id      = module.backend.principal_id
-  knowledge_container   = var.knowledge_container_name
-  tickets_container     = var.tickets_container_name
-  deployer_principal_id = data.azurerm_client_config.deployer.object_id
-  tags                  = local.tags
-}
-
-resource "azurerm_role_assignment" "backend_pull" {
-  scope                = azurerm_container_registry.app.id
-  role_definition_name = "AcrPull"
-  principal_id         = module.backend.principal_id
-}
-
-resource "azurerm_role_assignment" "frontend_pull" {
-  scope                = azurerm_container_registry.app.id
-  role_definition_name = "AcrPull"
-  principal_id         = module.frontend.principal_id
+  source              = "./modules/storage"
+  name                = var.storage_account_name
+  resource_group_name = data.azurerm_resource_group.demo.name
+  location            = data.azurerm_resource_group.demo.location
+  knowledge_dir       = local.knowledge_dir
+  knowledge_container = var.knowledge_container_name
+  tickets_container   = var.tickets_container_name
+  tags                = local.tags
 }

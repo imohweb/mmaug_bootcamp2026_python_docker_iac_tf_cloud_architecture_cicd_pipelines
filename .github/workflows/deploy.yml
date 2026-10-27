@@ -14,6 +14,11 @@ name: Deploy support agent to Azure App Service
 
 on:
   workflow_dispatch:
+    inputs:
+      external_access_verified:
+        description: Administrator verified existing runtime and release identity access
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -76,8 +81,13 @@ jobs:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           SPECIALIST_API_TOKEN: ${{ secrets.SPECIALIST_API_TOKEN }}
+          EXTERNAL_ACCESS_VERIFIED: ${{ inputs.external_access_verified }}
         run: |
           set -euo pipefail
+          [[ "$EXTERNAL_ACCESS_VERIFIED" == true ]] || {
+            echo "::error::Existing runtime and release identity access must be verified before deployment."
+            exit 1
+          }
           missing=0
           for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
             AZURE_RESOURCE_GROUP ACR_NAME BACKEND_WEB_APP_NAME FRONTEND_WEB_APP_NAME; do

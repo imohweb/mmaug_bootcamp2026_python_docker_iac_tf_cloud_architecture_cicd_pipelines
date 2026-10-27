@@ -1,11 +1,9 @@
 locals {
   foundry_name = "${var.prefix}-foundry"
   # Name kept from the earlier lab so existing projects are updated in place, not replaced.
-  foundry_project_name               = "launchpad"
-  foundry_project_endpoint           = "https://${local.foundry_name}.services.ai.azure.com/api/projects/${local.foundry_project_name}"
-  openai_endpoint                    = "https://${local.foundry_name}.openai.azure.com/"
-  azure_ai_developer_role_id         = "64702f94-c441-49e6-a78b-ef80e0188fee"
-  azure_ai_developer_role_definition = "/subscriptions/${data.azurerm_client_config.deployer.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/${local.azure_ai_developer_role_id}"
+  foundry_project_name     = "launchpad"
+  foundry_project_endpoint = "https://${local.foundry_name}.services.ai.azure.com/api/projects/${local.foundry_project_name}"
+  openai_endpoint          = "https://${local.foundry_name}.openai.azure.com/"
 }
 
 data "azurerm_client_config" "deployer" {}
@@ -66,34 +64,6 @@ resource "azurerm_cognitive_deployment" "model" {
   depends_on = [azapi_resource.project]
 }
 
-resource "azurerm_role_assignment" "web_agent" {
-  count              = var.enable_foundry ? 1 : 0
-  scope              = azapi_resource.project[0].id
-  role_definition_id = local.azure_ai_developer_role_definition
-  principal_id       = module.backend.principal_id
-}
-
-resource "azurerm_role_assignment" "web_model" {
-  count                = var.enable_foundry ? 1 : 0
-  scope                = azapi_resource.foundry[0].id
-  role_definition_name = "Cognitive Services OpenAI User"
-  principal_id         = module.backend.principal_id
-}
-
-resource "azurerm_role_assignment" "project_model" {
-  count                = var.enable_foundry ? 1 : 0
-  scope                = azapi_resource.foundry[0].id
-  role_definition_name = "Cognitive Services OpenAI User"
-  principal_id         = azapi_resource.project[0].output.identity.principalId
-}
-
-resource "azurerm_role_assignment" "agent_deployer" {
-  count              = var.enable_foundry ? 1 : 0
-  scope              = azapi_resource.foundry[0].id
-  role_definition_id = local.azure_ai_developer_role_definition
-  principal_id       = data.azurerm_client_config.deployer.object_id
-}
-
 # Agents use a data-plane API, not an ARM child resource supported by this configuration.
 resource "terraform_data" "knowledge_setup" {
   count = var.enable_foundry ? 1 : 0
@@ -109,12 +79,7 @@ resource "terraform_data" "knowledge_setup" {
   }
   depends_on = [
     module.storage, azurerm_cognitive_deployment.model,
-    azurerm_role_assignment.search_blob_reader,
-    azurerm_role_assignment.search_model_user,
-    azurerm_role_assignment.project_search_reader,
-    azurerm_role_assignment.search_deployer,
-    azurerm_role_assignment.search_deployer_reader,
-    azurerm_role_assignment.agent_deployer,
+    azurerm_search_service.knowledge, azapi_resource.project,
   ]
 }
 
@@ -158,8 +123,6 @@ resource "terraform_data" "agent" {
   }
   depends_on = [
     azurerm_cognitive_deployment.model,
-    azurerm_role_assignment.agent_deployer,
-    azurerm_role_assignment.project_model,
     terraform_data.knowledge_setup,
   ]
 }

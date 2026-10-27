@@ -5,9 +5,11 @@
 # AZURE_RESOURCE_GROUP: RG-MMAUG-Bootcamp (existing; never created/deleted).
 # STATE_ACCOUNT: globally unique 3-24 lowercase/digit storage account name.
 # RESOURCE_PREFIX: unique 6-18 lowercase/digit prefix starting with a letter.
+# WEB_IDENTITY_RESOURCE_ID: existing user-assigned identity for both web apps.
 # Optional environment VARIABLE: FOUNDRY_LOCATION (default eastus2; verify quota).
 # No client secret required; GitHub supplies OIDC tokens automatically.
-# ADMIN PREREQUISITES: scoped resource/RBAC management and Blob data access.
+# ADMIN PREREQUISITES: existing identity attachment and Blob/Search/Foundry access.
+# Terraform does not grant roles. Verify external access before selecting apply.
 # Configure dev required reviewers and main-only branch restrictions BEFORE apply.
 # Migrate/reconcile earlier local state before confirming state_ready.
 # State key: mmaug/azure-demo.tfstate; bootstrap containers: tfstate, knowledge, tickets.
@@ -22,6 +24,10 @@ on:
         default: false
       state_ready:
         description: Existing state has been reconciled/migrated or this is a reviewed new deployment
+        type: boolean
+        default: false
+      external_access_verified:
+        description: Administrator verified all existing runtime, service and deployment access
         type: boolean
         default: false
 permissions:
@@ -52,6 +58,7 @@ jobs:
       TF_VAR_prefix: ${{ vars.RESOURCE_PREFIX }}
       TF_VAR_storage_account_name: ${{ vars.STATE_ACCOUNT }}
       TF_VAR_foundry_location: ${{ vars.FOUNDRY_LOCATION || 'eastus2' }}
+      TF_VAR_web_identity_resource_id: ${{ vars.WEB_IDENTITY_RESOURCE_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,11 +66,18 @@ jobs:
       - name: Check explicit state review and required configuration
         env:
           STATE_READY: ${{ inputs.state_ready }}
+          APPLY: ${{ inputs.apply }}
+          EXTERNAL_ACCESS_VERIFIED: ${{ inputs.external_access_verified }}
         run: |
           set -euo pipefail
           [[ "$STATE_READY" == true ]] || { echo "Review/migrate earlier state before initializing this backend"; exit 1; }
           : "${ARM_CLIENT_ID:?}" "${ARM_TENANT_ID:?}" "${ARM_SUBSCRIPTION_ID:?}"
           : "${STATE_ACCOUNT:?}" "${TF_VAR_prefix:?}"
+          : "${TF_VAR_web_identity_resource_id:?Configure WEB_IDENTITY_RESOURCE_ID in dev}"
+          if [[ "$APPLY" == true && "$EXTERNAL_ACCESS_VERIFIED" != true ]]; then
+            echo "::error::Apply requires administrator verification of existing runtime, service and deployment access."
+            exit 1
+          fi
           [[ "$STATE_RG" == RG-MMAUG-Bootcamp ]] || exit 1
       - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
@@ -120,8 +134,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
+          EXTERNAL_ACCESS_VERIFIED: ${{ inputs.external_access_verified }}
         run: |
           set -euo pipefail
+          [[ "$EXTERNAL_ACCESS_VERIFIED" == true ]] || {
+            echo "::error::Existing runtime, service and deployment access must be verified before apply."
+            exit 1
+          }
           gh api "repos/$REPOSITORY/environments/dev" \
             --jq '[.protection_rules[] | select(.type == "required_reviewers") | .reviewers[]] | length > 0' |
             grep -qx true

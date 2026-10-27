@@ -14,6 +14,11 @@ web apps.
 - The **backend** image runs Flask/Gunicorn as a non-root user. Backend managed
   identity accesses tickets, source knowledge and Foundry; the browser receives
   no Azure credentials.
+- Both web apps attach the same existing user-assigned identity selected by
+  `WEB_IDENTITY_RESOURCE_ID`. ACR pulls and backend Azure SDK calls explicitly
+  select its client ID. This shared identity exposes backend Azure privileges
+  to the frontend too. Search/project retain their system-assigned identities;
+  all role grants are owned outside Terraform by an administrator.
 - The bootstrapped storage account has three private containers. `tfstate`
   contains Terraform state and leases, `knowledge` contains the Markdown source
   and `tickets` contains ticket JSON. Application identities cannot access state.
@@ -70,8 +75,10 @@ flowchart LR
 
 GitHub environment `dev` must have required reviewers/branch restrictions set
 externally. The existing environment was unprotected when inspected. OIDC
-authentication is not authorization to manage role assignments or Blob data:
-administrator-provisioned permissions remain prerequisites.
+authentication is not authorization for identity attachment or data access.
+Terraform does not manage role assignments; administrator-verified permissions
+remain prerequisites. Apply requires `external_access_verified=true` in
+addition to state review, saved-plan approval and the environment reviewer.
 
 Bootstrap storage and the existing RG are outside Terraform destroy ownership.
 Existing local state must be reviewed/migrated before the pipeline uses a

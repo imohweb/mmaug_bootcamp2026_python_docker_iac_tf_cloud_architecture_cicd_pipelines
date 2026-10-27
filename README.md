@@ -112,7 +112,9 @@ No workflow grants itself additional permissions.
 2. Configure the `dev` variables required by the workflow, including
    `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
    `AZURE_RESOURCE_GROUP=RG-MMAUG-Bootcamp`, a globally unique storage account
-   name and a unique resource prefix. See [skills.md](skills.md) for the runbook.
+   name, a unique resource prefix, and `WEB_IDENTITY_RESOURCE_ID` for the
+   existing user-assigned identity attached to both web apps.
+   See [skills.md](skills.md) for the runbook.
 3. Add required reviewers and branch restrictions to `dev`. At inspection time
    it had **no protection rules or variables/secrets configured**.
 4. Review the workflow and its plan/apply inputs before dispatch. Bootstrap
@@ -134,16 +136,45 @@ before apply; application pipelines do not provision models.
 
 ### Required Azure permissions
 
-The existing SP has **Contributor on `RG-MMAUG-Bootcamp`**. That permits resource
-management there but not RBAC assignments or Blob data access. An authorized
-administrator must additionally grant the needed permissions:
+Terraform reuses an existing user-assigned identity for both web apps and
+does not create role assignments. The existing SP's OIDC login is separate
+from the application identity. Administrators own and verify existing access:
 
-- Scoped **Role Based Access Control Administrator** (or an equivalent,
-  preferably constrained role) for Terraform's role assignments within this RG.
+- Resource management in the target RG, permission to read and attach the
+  supplied identity (including `userAssignedIdentities/assign/action` at its
+  scope), and ACR push access for the deployment SP.
 - **Storage Blob Data Contributor** for bootstrap/state access, scoped to the
   account once it exists; bootstrap of a new account needs an explicitly
   approved inheritance scope or a separate privileged bootstrap.
-- Search/Foundry data-plane roles as required by the indexing/agent setup.
+- Runtime identity: AcrPull on the target registry, Blob Data Contributor on
+  `tickets`, Blob Data Reader on `knowledge`, Azure AI Developer on the Foundry
+  project, and Cognitive Services OpenAI User on the Foundry account.
+- Search system identity: Blob Data Reader on `knowledge` and Cognitive Services
+  User on the Foundry account. Foundry project system identity: Search Index
+  Data Reader on Search and Cognitive Services OpenAI User on the account.
+- Deployment SP: Search Service Contributor and Search Index Data Reader on
+  Search, and Azure AI Developer on the Foundry account for index/agent setup.
+
+The shared web identity means the frontend also has the backend's Azure
+permissions; this is an explicitly selected tradeoff, not identity isolation.
+Neither app may receive access to `tfstate`. In particular, do not give the
+shared runtime identity RG-wide Blob roles over the state account.
+
+Before `apply=true`, an administrator must verify all these permissions and
+the presenter must confirm `external_access_verified=true`, as well as state
+review and the saved-plan approval. This input is an attestation, not a role
+grant or an automatic permission check. Plan-only runs do not require it.
+Search/project identities remain system-assigned: for new services, an
+administrator must arrange their provisioning and permissions separately,
+then reconcile/import their resources before a complete workload apply.
+The workflow does not pause mid-apply to grant permissions, and missing access
+must block apply rather than relying on a partially failed deployment.
+
+If authoritative state already tracks `azurerm_role_assignment` resources,
+removing their configuration would propose deleting those grants. Stop and
+have an administrator review relinquishing those addresses from state without
+deleting Azure assignments before planning this configuration. Do not apply a
+plan that revokes existing access.
 
 Do not grant subscription Owner merely to bypass missing prerequisites.
 The existing RG and bootstrapped state storage are outside Terraform destroy
@@ -151,6 +182,11 @@ ownership. **Earlier local state must be reviewed and migrated before first
 pipeline use**; never start from empty remote state over existing resources.
 
 ## Deploy the application to the cloud
+
+The release also requires `external_access_verified=true` after administrator
+verification of runtime access and the OIDC SP's ACR push/deployment access.
+The default is false and fails before Azure login, image push or app changes.
+This additional check does not replace explicit release authorization.
 
 [CI](.github/workflows/ci.yml) runs backend, React, proxy, container and Terraform
 checks only; pushes and pull requests do not deploy. Manually run

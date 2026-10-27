@@ -15,14 +15,16 @@ resource "azurerm_linux_web_app" "app" {
   ftp_publish_basic_authentication_enabled       = false
   webdeploy_publish_basic_authentication_enabled = false
   identity {
-    type = "SystemAssigned"
+    type         = "UserAssigned"
+    identity_ids = [var.identity_id]
   }
   site_config {
-    always_on                               = true
-    minimum_tls_version                     = "1.2"
-    health_check_path                       = "/health"
-    health_check_eviction_time_in_min       = 2
-    container_registry_use_managed_identity = true
+    always_on                                     = true
+    minimum_tls_version                           = "1.2"
+    health_check_path                             = "/health"
+    health_check_eviction_time_in_min             = 2
+    container_registry_use_managed_identity       = true
+    container_registry_managed_identity_client_id = var.identity_client_id
     application_stack {
       docker_image_name   = var.image_name
       docker_registry_url = var.registry_url

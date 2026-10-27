@@ -6,7 +6,6 @@ locals {
   knowledge_base_name    = "support-knowledge"
   search_connection_name = "support-knowledge-mcp"
   knowledge_storage_id   = "/subscriptions/${data.azurerm_client_config.deployer.subscription_id}/resourceGroups/${data.azurerm_resource_group.demo.name}/providers/Microsoft.Storage/storageAccounts/${var.storage_account_name}"
-  knowledge_container_id = "${local.knowledge_storage_id}/blobServices/default/containers/${var.knowledge_container_name}"
   knowledge_setup_environment = var.enable_foundry ? {
     FOUNDRY_SEARCH_ENDPOINT        = local.search_endpoint
     FOUNDRY_SEARCH_INDEX_NAME      = local.search_index_name
@@ -37,42 +36,6 @@ resource "azurerm_search_service" "knowledge" {
     type = "SystemAssigned"
   }
   tags = local.tags
-}
-
-resource "azurerm_role_assignment" "search_blob_reader" {
-  count                = var.enable_foundry ? 1 : 0
-  scope                = local.knowledge_container_id
-  role_definition_name = "Storage Blob Data Reader"
-  principal_id         = azurerm_search_service.knowledge[0].identity[0].principal_id
-  depends_on           = [module.storage]
-}
-
-resource "azurerm_role_assignment" "search_model_user" {
-  count                = var.enable_foundry ? 1 : 0
-  scope                = azapi_resource.foundry[0].id
-  role_definition_name = "Cognitive Services User"
-  principal_id         = azurerm_search_service.knowledge[0].identity[0].principal_id
-}
-
-resource "azurerm_role_assignment" "project_search_reader" {
-  count                = var.enable_foundry ? 1 : 0
-  scope                = azurerm_search_service.knowledge[0].id
-  role_definition_name = "Search Index Data Reader"
-  principal_id         = azapi_resource.project[0].output.identity.principalId
-}
-
-resource "azurerm_role_assignment" "search_deployer" {
-  count                = var.enable_foundry ? 1 : 0
-  scope                = azurerm_search_service.knowledge[0].id
-  role_definition_name = "Search Service Contributor"
-  principal_id         = data.azurerm_client_config.deployer.object_id
-}
-
-resource "azurerm_role_assignment" "search_deployer_reader" {
-  count                = var.enable_foundry ? 1 : 0
-  scope                = azurerm_search_service.knowledge[0].id
-  role_definition_name = "Search Index Data Reader"
-  principal_id         = data.azurerm_client_config.deployer.object_id
 }
 
 output "knowledge_setup_environment" {

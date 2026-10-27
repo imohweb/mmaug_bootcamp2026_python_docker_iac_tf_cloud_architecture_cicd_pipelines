@@ -1,12 +1,13 @@
 # Development environment values. Placeholders only: this file is committed.
 # Usage: terraform plan -var-file=dev.tfvars -out=azure.tfplan
-subscription_id      = "00000000-0000-0000-0000-000000000000"
-prefix               = "mmaugyourname26"
-resource_group_name  = "RG-MMAUG-Bootcamp"
-storage_account_name = "replacestorageaccount"
-location             = "northeurope"
-app_service_sku      = "B1"
-image_tag            = "bootstrap"
+subscription_id          = "00000000-0000-0000-0000-000000000000"
+prefix                   = "mmaugyourname26"
+resource_group_name      = "RG-MMAUG-Bootcamp"
+storage_account_name     = "replacestorageaccount"
+web_identity_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/replaceidentityrg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/replaceidentity"
+location                 = "northeurope"
+app_service_sku          = "B1"
+image_tag                = "bootstrap"
 
 # Paid AI drafting. Set enable_foundry = false to run on knowledge templates only.
 # Verify model availability, quota and cost before applying.

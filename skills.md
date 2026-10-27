@@ -32,6 +32,7 @@ the appropriate `SKILL.md` packaging; do not assume this file is auto-loaded.
 | Storage account and private containers | Idempotent infrastructure bootstrap |
 | Remote state | Terraform Azure backend with Entra/OIDC and blob lease locking |
 | App plan, two apps, ACR, Foundry and Search | Azure Terraform root module |
+| Existing web identity and all role assignments | Administrator; Terraform reads/attaches the identity but grants no roles |
 | Knowledge ingestion / agent configuration | Infrastructure setup and index checks |
 | Container image digests and specialist token setting | Application release pipeline |
 | Ticket approval | Human specialist, never an unattended model action |
@@ -141,6 +142,10 @@ Configure **GitHub environment `dev`**:
   `STATE_ACCOUNT` (globally unique storage name), `RESOURCE_PREFIX` and optional
   `FOUNDRY_LOCATION` (defaults to eastus2), as named in
   [infra.yml](.github/workflows/infra.yml).
+- Runtime identity: `WEB_IDENTITY_RESOURCE_ID`, the full resource ID of the
+  existing user-assigned identity for both web apps. This is separate from the
+  deployment SP's `AZURE_CLIENT_ID`; backend SDK configuration uses the
+  runtime identity client ID resolved by Terraform.
 - Application variables: `ACR_NAME`, `BACKEND_WEB_APP_NAME`,
   `FRONTEND_WEB_APP_NAME` from infrastructure outputs.
 - Application secret: `SPECIALIST_API_TOKEN`, generated randomly, at least
@@ -155,8 +160,14 @@ for every action:
 
 1. Resource Contributor allows resources within this RG, not subscription-wide
    provider registration or creation of another group.
-2. Terraform role assignments need a scoped RBAC administration role, ideally
-   constrained to the role definitions/principals the app actually needs.
+2. Terraform does not create role assignments. Administrators own existing
+   runtime/service grants and the deployment SP's permission to read/attach
+   the web identity. Verify the [permission matrix](README.md#required-azure-permissions)
+   before setting the workflow input `external_access_verified=true`; apply
+   fails closed without that attestation. Plan-only runs remain available.
+   Search/project system identities require separately administered provisioning
+   and access, with reviewed imports when needed, before a complete apply.
+   No role-management permission is required for Terraform itself.
 3. Bootstrap/state operations need Storage Blob Data Contributor. A newly
    created account requires either an approved inherited data role or a
    separate administrator bootstrap, followed by account-scoped access.
@@ -181,6 +192,9 @@ protection metadata through GitHub's API; inability to read it fails closed.
 1. Verify the source branch/commit, environment, subscription and existing RG.
 2. If earlier Terraform state exists, review and migrate it first. Never allow
    a fresh remote state to duplicate resources already managed locally.
+   If it tracks role assignments, arrange reviewed removal of their state
+   ownership without deleting the actual grants before using this configuration.
+   Never approve a plan that deletes those existing permissions.
 3. Run bootstrap before `terraform init`: create/reuse Entra-only StorageV2 and
    the three containers, without managing that storage in the app root module.
 4. Initialize the Azure backend with OIDC and the private state container.
@@ -338,6 +352,7 @@ variables and not secrets):
 | `AZURE_RESOURCE_GROUP` | Exactly `RG-MMAUG-Bootcamp`; it is existing and must not be created or deleted. |
 | `STATE_ACCOUNT` | Approved, globally unique 3–24 character lowercase/digit storage account name. Check availability and existing state before selecting. |
 | `RESOURCE_PREFIX` | Presenter-approved unique 6–18 character lowercase/digit prefix starting with a letter. |
+| `WEB_IDENTITY_RESOURCE_ID` | Full resource ID of the existing administrator-approved user-assigned identity used by both apps; attachment and runtime access must be verified. |
 | `FOUNDRY_LOCATION` | Optional; use the approved location (current default is `eastus2`) only after availability/quota review. |
 | `ACR_NAME` | Terraform output after successful infrastructure apply. |
 | `BACKEND_WEB_APP_NAME` | Terraform output after successful infrastructure apply. |
@@ -357,6 +372,11 @@ against both workflows. The three application outputs are not available until
 infrastructure succeeds; set and verify them before app release.
 
 ### 11.4 Mandatory presenter pauses
+
+Both infrastructure apply and application release additionally require
+`external_access_verified=true` after administrator verification of existing
+deployment/runtime/service permissions. This attestation grants no access and
+never substitutes for the presenter pauses below.
 
 **Pause A — manual secret entry.** After the non-secret variables have been
 verified, stop and ask the presenter to add `SPECIALIST_API_TOKEN` as a
@@ -402,6 +422,8 @@ infrastructure. Deployment builds/pushes images and changes both App Services.
 3. Perform Pause A and Pause B. Run the GitHub `infra.yml` workflow on the
    target branch with `state_ready=true` only after state review and
    `apply=true` only after the plan review and explicit authorization. Wait
+   for administrator verification of all existing access before confirming
+   `external_access_verified=true`; this does not replace the plan approval. Wait
    for the environment reviewer approval and successful Terraform apply.
    Do not assume a successful bootstrap or plan means infrastructure applied.
 4. Populate `ACR_NAME`, `BACKEND_WEB_APP_NAME` and
