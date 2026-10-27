@@ -15,8 +15,7 @@ accounts=$(az storage account list -g "$STATE_RG" --query "[?name=='$STATE_ACCOU
 if [[ -z "$accounts" ]]; then
   az storage account create -g "$STATE_RG" -n "$STATE_ACCOUNT" -l "$location" \
     --sku Standard_LRS --kind StorageV2 --https-only true --min-tls-version TLS1_2 \
-    --allow-blob-public-access false --allow-shared-key-access false \
-    --default-to-oauth-authentication true -o none
+    --allow-blob-public-access false --allow-shared-key-access false -o none
 fi
 properties=$(az storage account show -g "$STATE_RG" -n "$STATE_ACCOUNT" -o json)
 jq -e '.allowSharedKeyAccess == false and .allowBlobPublicAccess == false and

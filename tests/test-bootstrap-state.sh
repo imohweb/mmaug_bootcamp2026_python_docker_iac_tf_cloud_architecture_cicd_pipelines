@@ -10,8 +10,16 @@ az() {
     'storage account show '*)
       if [[ "$MODE" == insecure ]]; then echo '{}'
       else echo '{"allowSharedKeyAccess":false,"allowBlobPublicAccess":false,"enableHttpsTrafficOnly":true,"minimumTlsVersion":"TLS1_2"}'; fi ;;
-    'storage container create '*) [[ "$MODE" != denied ]] ;;
-    'storage account create '*|'storage account blob-service-properties update '*) return 0 ;;
+    'storage container create '*)
+      [[ "$*" == *'--auth-mode login --public-access off'* ]] || {
+        echo "Container creation must use Entra authentication and private access" >&2; return 1;
+      }
+      [[ "$MODE" != denied ]] ;;
+    'storage account create '*)
+      [[ "$*" == 'storage account create -g RG-MMAUG-Bootcamp -n syntheticstorage -l northeurope --sku Standard_LRS --kind StorageV2 --https-only true --min-tls-version TLS1_2 --allow-blob-public-access false --allow-shared-key-access false -o none' ]] || {
+        echo "Unexpected storage creation arguments: $*" >&2; return 1;
+      } ;;
+    'storage account blob-service-properties update '*) return 0 ;;
     *) echo "Unexpected Azure operation: $*" >&2; return 1 ;;
   esac
 }
