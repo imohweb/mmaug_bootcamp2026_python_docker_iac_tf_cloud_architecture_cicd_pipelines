@@ -11,7 +11,7 @@ try:
     from azure.ai.projects import AIProjectClient
     from azure.ai.projects.models import MCPTool, PromptAgentDefinition
     from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
-    from azure.identity import DefaultAzureCredential
+    from provisioning_credential import provisioning_credential
 except ModuleNotFoundError as error:
     requirements = Path(__file__).with_name("requirements.txt")
     raise SystemExit(
@@ -91,7 +91,7 @@ def main() -> None:
     parser.add_argument("action", choices=("create", "delete"))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    with DefaultAzureCredential() as credential:
+    with provisioning_credential() as credential:
         with AIProjectClient(
             endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
             credential=credential,
