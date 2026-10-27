@@ -9,8 +9,10 @@ export BACKEND_IMAGE_REF="demoregistry.azurecr.io/support-agent-backend@sha256:$
 export FRONTEND_IMAGE_REF="demoregistry.azurecr.io/support-agent-frontend@sha256:$(printf 'b%.0s' {1..64})"
 export MODE=success
 export MOCK_LOG
+export FLAKY_MARK
 MOCK_LOG=$(mktemp)
-trap 'rm -f "$MOCK_LOG"' EXIT
+FLAKY_MARK=$(mktemp)
+trap 'rm -f "$MOCK_LOG" "$FLAKY_MARK"' EXIT
 az() {
   printf '%s\n' "$*" >> "$MOCK_LOG"
   case "$*" in
@@ -40,6 +42,7 @@ curl() {
     */health)
       if [[ "$MODE" == bad-health ]]; then echo '{"status":"bad"}'; else echo '{"status":"ok"}'; fi ;;
     */api/config)
+      if [[ "$MODE" == flaky-config && ! -s "$FLAKY_MARK" ]]; then echo once > "$FLAKY_MARK"; return 28; fi
       if [[ "$MODE" == bad-config ]]; then echo '{}'; else echo '{"ai_mode":"agent","teams":[{},{},{},{}]}'; fi ;;
     */api/specialist/knowledge)
       config=$(cat)
@@ -66,6 +69,9 @@ grep -q -- "--container-image-name $BACKEND_IMAGE_REF" "$MOCK_LOG"
 grep -q -- "--container-image-name $FRONTEND_IMAGE_REF" "$MOCK_LOG"
 ! grep -q "$SPECIALIST_API_TOKEN" "$MOCK_LOG"
 ! grep -q 'vm run-command' "$MOCK_LOG"
+export MODE=flaky-config
+expect pass
+grep -q once "$FLAKY_MARK"
 for MODE in azure-failure unavailable frontend-unavailable bad-health bad-config bad-knowledge bad-html; do
   export MODE
   expect fail

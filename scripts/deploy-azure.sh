@@ -65,12 +65,13 @@ verify() {
   for attempt in $(seq 1 30); do
     if body=$(get_json "$url/health") &&
        jq -e -s 'length == 1 and .[0].status == "ok"' <<< "$body" >/dev/null; then
-      body=$(get_json "$url/api/config") || return 1
+      # A restarting container can pass /health and then drop requests; retry.
+      body=$(get_json "$url/api/config") || { sleep 5; continue; }
       jq -e -s 'length == 1 and (.[0].teams | type) == "array" and (.[0].teams | length) == 4 and
         (.[0].ai_mode == "off" or .[0].ai_mode == "agent" or .[0].ai_mode == "model")' \
         <<< "$body" >/dev/null || { echo "Invalid config JSON contract: $url" >&2; return 1; }
       body=$(printf 'header = "Authorization: Bearer %s"\n' "$SPECIALIST_API_TOKEN" |
-        get_json --config - "$url/api/specialist/knowledge") || return 1
+        get_json --config - "$url/api/specialist/knowledge") || { sleep 5; continue; }
       jq -e -s 'length == 1 and (.[0].documents | type) == "array" and (.[0].documents | length) >= 1' \
         <<< "$body" >/dev/null || { echo "Invalid knowledge JSON contract: $url" >&2; return 1; }
       echo "Verified health, config and knowledge: $url"
