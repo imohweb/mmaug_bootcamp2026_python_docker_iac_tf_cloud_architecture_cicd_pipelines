@@ -97,7 +97,7 @@ jobs:
         working-directory: infra/azure
         run: |
           set -euo pipefail
-          printf 'terraform { backend "azurerm" {} }\n' > backend.tf
+          printf 'terraform {\n  backend "azurerm" {}\n}\n' > backend.tf
           terraform init -input=false \
             -backend-config="storage_account_name=$STATE_ACCOUNT" \
             -backend-config="container_name=tfstate" \
@@ -164,7 +164,7 @@ jobs:
         working-directory: infra/azure
         run: |
           set -euo pipefail
-          printf 'terraform { backend "azurerm" {} }\n' > backend.tf
+          printf 'terraform {\n  backend "azurerm" {}\n}\n' > backend.tf
           terraform init -input=false \
             -backend-config="storage_account_name=$STATE_ACCOUNT" \
             -backend-config="container_name=tfstate" \
