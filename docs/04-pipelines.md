@@ -32,6 +32,25 @@ are still allowed. Scripts do not auto-escalate. Required reviewers and branch
 restrictions must be configured externally on dev; OIDC alone is not approval.
 See the actual workflow for current input and variable names.
 
+### Applying a previously completed plan-only run
+
+[apply-reviewed-plan.yml](../.github/workflows/apply-reviewed-plan.yml) is
+manual-only and shares `dev` and the infrastructure concurrency group. It
+requires the reviewed source run ID, attempt, full SHA and artifact ID.
+Before Azure login it verifies successful same-repository `infra.yml`
+provenance, plan-job attempt timestamps, artifact expiry/digest/contents,
+required reviewers, and a main-only selected-branch policy. It then checks out
+the exact reviewed SHA and applies the saved binary plan without re-planning
+or bootstrap. `external_access_verified` defaults to false. Permission or
+metadata lookup failures stop execution; they are not bypassed.
+
+Publishing this workflow is not authorization to apply. Obtain explicit review
+of the source plan and external-access evidence before dispatch and preserve
+the protected environment approval. If state changed or the artifact expired,
+stop and obtain review of a new plan. Never reuse an earlier approval for it.
+Offline provenance/guard tests run with `python3 tests/test-reviewed-plan.py`
+and are included in CI.
+
 ## Application: GitHub Actions
 
 [ci.yml](../.github/workflows/ci.yml) tests Python, React and the Node API proxy,

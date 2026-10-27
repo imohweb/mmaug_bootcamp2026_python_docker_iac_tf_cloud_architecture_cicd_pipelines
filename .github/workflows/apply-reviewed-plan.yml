@@ -1,0 +1,166 @@
+name: Apply reviewed Azure infrastructure plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Successful infra.yml plan run ID
+        required: true
+        type: string
+      source_run_attempt:
+        description: Successful plan run attempt
+        required: true
+        type: string
+      source_sha:
+        description: Reviewed full 40-character source commit
+        required: true
+        type: string
+      plan_artifact_id:
+        description: Reviewed immutable plan artifact ID from that run
+        required: true
+        type: string
+      external_access_verified:
+        description: Administrator verified all existing runtime, service and deployment access
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: azure-infrastructure-dev
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      ARM_USE_OIDC: 'true'
+      ARM_USE_AZUREAD: 'true'
+      TF_IN_AUTOMATION: 'true'
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      STATE_ACCOUNT: ${{ vars.STATE_ACCOUNT }}
+    steps:
+      - name: Verify source run, approval configuration and immutable artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_ATTEMPT: ${{ inputs.source_run_attempt }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          ARTIFACT_ID: ${{ inputs.plan_artifact_id }}
+          EXTERNAL_ACCESS_VERIFIED: ${{ inputs.external_access_verified }}
+          TARGET_RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import datetime
+          import hashlib
+          import io
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          import zipfile
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(f"::error::{message}")
+
+          def api(path):
+              return json.loads(subprocess.check_output(["gh", "api", path]))
+
+          env = os.environ
+          require(env["EXTERNAL_ACCESS_VERIFIED"] == "true", "External access must be verified before apply.")
+          require(env["TARGET_RG"] == "RG-MMAUG-Bootcamp", "Unexpected target resource group.")
+          for name in ("SOURCE_RUN_ID", "SOURCE_ATTEMPT", "ARTIFACT_ID"):
+              require(re.fullmatch(r"[1-9][0-9]*", env[name]), f"Invalid {name}.")
+          require(re.fullmatch(r"[a-f0-9]{40}", env["SOURCE_SHA"]), "Invalid reviewed commit.")
+          repo = env["GITHUB_REPOSITORY"]
+          base = f"repos/{repo}"
+          protection = api(f"{base}/environments/dev")
+          require(any(rule.get("type") == "required_reviewers" and rule.get("reviewers")
+                      for rule in protection["protection_rules"]), "Required reviewer is missing.")
+          policy = protection.get("deployment_branch_policy") or {}
+          require(policy.get("custom_branch_policies") is True
+                  and policy.get("protected_branches") is False, "Selected-branch protection is required.")
+          branches = api(f"{base}/environments/dev/deployment-branch-policies")
+          require(branches["total_count"] == 1
+                  and branches["branch_policies"][0]["name"] == "main"
+                  and branches["branch_policies"][0]["type"] == "branch", "Only main may deploy.")
+          run = api(f"{base}/actions/runs/{env['SOURCE_RUN_ID']}")
+          require(run["repository"]["full_name"] == repo
+                  and run["head_repository"]["full_name"] == repo
+                  and run["event"] == "workflow_dispatch"
+                  and run["path"] == ".github/workflows/infra.yml"
+                  and run["head_branch"] == "main"
+                  and run["head_sha"] == env["SOURCE_SHA"]
+                  and run["run_attempt"] == int(env["SOURCE_ATTEMPT"])
+                  and run["status"] == "completed"
+                  and run["conclusion"] == "success", "Source run provenance or result does not match.")
+          jobs = api(f"{base}/actions/runs/{env['SOURCE_RUN_ID']}/attempts/{env['SOURCE_ATTEMPT']}/jobs")
+          plans = [job for job in jobs["jobs"] if job["name"] == "plan" and job["conclusion"] == "success"]
+          require(len(plans) == 1, "Successful plan job for the reviewed attempt is missing.")
+          artifact = api(f"{base}/actions/artifacts/{env['ARTIFACT_ID']}")
+          require(artifact["workflow_run"]["id"] == int(env["SOURCE_RUN_ID"])
+                  and artifact["workflow_run"]["head_sha"] == env["SOURCE_SHA"]
+                  and artifact["name"] == "reviewed-infrastructure-plan"
+                  and not artifact["expired"], "Plan artifact provenance does not match.")
+          require(plans[0]["started_at"] <= artifact["created_at"] <= plans[0]["completed_at"],
+                  "Artifact does not belong to the reviewed plan attempt.")
+          expires = datetime.datetime.fromisoformat(artifact["expires_at"].replace("Z", "+00:00"))
+          require(expires > datetime.datetime.now(datetime.timezone.utc), "Plan artifact has expired.")
+          digest = artifact.get("digest") or ""
+          require(re.fullmatch(r"sha256:[a-f0-9]{64}", digest), "Artifact digest is unavailable.")
+          archive = subprocess.check_output(["gh", "api", f"{base}/actions/artifacts/{env['ARTIFACT_ID']}/zip"])
+          require("sha256:" + hashlib.sha256(archive).hexdigest() == digest, "Artifact digest mismatch.")
+          with zipfile.ZipFile(io.BytesIO(archive)) as saved:
+              require(saved.namelist() == ["azure.tfplan"], "Unexpected plan archive contents.")
+              target = Path(env["RUNNER_TEMP"]) / "reviewed-plan"
+              target.mkdir(mode=0o700)
+              plan = target / "azure.tfplan"
+              plan.write_bytes(saved.read("azure.tfplan"))
+              plan.chmod(0o600)
+          print("Verified reviewed plan provenance and digest; no re-plan will be performed.")
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: '1.16.5'
+      - run: pip install -r support-agent/backend/requirements.txt
+      - name: Apply exact reviewed plan without bootstrap or re-planning
+        working-directory: infra/azure
+        run: |
+          set -euo pipefail
+          : "${ARM_CLIENT_ID:?}" "${ARM_TENANT_ID:?}" "${ARM_SUBSCRIPTION_ID:?}" "${STATE_ACCOUNT:?}"
+          printf 'terraform {\n  backend "azurerm" {}\n}\n' > backend.tf
+          terraform init -input=false -lockfile=readonly \
+            -backend-config="storage_account_name=$STATE_ACCOUNT" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=mmaug/azure-demo.tfstate" \
+            -backend-config="use_azuread_auth=true" \
+            -backend-config="use_oidc=true"
+          terraform apply -input=false -lock-timeout=5m "$RUNNER_TEMP/reviewed-plan/azure.tfplan"
+          terraform output backend_web_app_name
+          terraform output frontend_web_app_name
+          terraform output acr_name

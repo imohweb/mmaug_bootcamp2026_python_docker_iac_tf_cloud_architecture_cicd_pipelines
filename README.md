@@ -126,6 +126,20 @@ No workflow grants itself additional permissions.
 6. Index the uploaded knowledge and check successful ingestion before releasing
    the application. Do not treat an empty index as a successful AI deployment.
 
+For a completed plan-only run, its dispatch inputs cannot be changed.
+[apply-reviewed-plan.yml](.github/workflows/apply-reviewed-plan.yml) provides a
+separate manual, protected path for that existing artifact. Supply its run ID,
+successful attempt, full source SHA and immutable artifact ID. It verifies the
+same-repository manual `infra.yml` run on `main`, successful plan job, artifact
+creation within that attempt, expiry, SHA-256 digest and archive contents.
+Missing metadata or unreadable protection settings fail closed. It checks out
+the reviewed source SHA and uses the same Terraform version and locked
+providers to apply that exact plan, without bootstrap or re-planning. The
+`dev` reviewer, main-only restriction, external-access attestation and shared
+infrastructure concurrency group still apply. Stale state must fail rather
+than trigger an automatic re-plan; a new plan needs a new review. This workflow
+does not release either application.
+
 The infrastructure defaults to **`gpt-6.1-sol`**, version **`2026-09-29`**,
 deployed as `demo-model` (`GlobalStandard`, capacity 10, Foundry region `eastus2`).
 The model is selected in [variables.tf](infra/azure/variables.tf) and provisioned

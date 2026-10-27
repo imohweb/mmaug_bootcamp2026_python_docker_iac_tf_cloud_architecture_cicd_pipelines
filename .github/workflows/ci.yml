@@ -29,6 +29,7 @@ jobs:
       - run: bash -n scripts/deploy-azure.sh scripts/bootstrap-state.sh tests/test-deploy.sh
       - run: bash tests/test-deploy.sh
       - run: bash tests/test-bootstrap-state.sh
+      - run: python3 tests/test-reviewed-plan.py
 
   backend:
     name: Backend (Python ${{ matrix.python }})

@@ -201,6 +201,13 @@ protection metadata through GitHub's API; inability to read it fails closed.
 5. Validate and create the plan. Protect saved plans as sensitive artifacts.
 6. Review the exact plan and its commit. Apply that plan only after the intended
    approval boundary; do not re-plan silently after approval.
+   For a completed plan-only run, use the manual
+   [reviewed-plan apply workflow](.github/workflows/apply-reviewed-plan.yml)
+   with the reviewed run ID, attempt, full SHA and artifact ID. It verifies
+   source provenance, artifact expiry/digest/contents and environment
+   protection before applying the exact artifact at its source SHA. It never
+   bootstraps or re-plans. External-access attestation and the environment
+   reviewer remain mandatory; failed verification or stale state must stop.
 7. Verify knowledge indexing and agent retrieval setup. An accepted indexer
    start request is not equivalent to successful ingestion.
 8. Record outputs for application release variables. Do not print secrets or
