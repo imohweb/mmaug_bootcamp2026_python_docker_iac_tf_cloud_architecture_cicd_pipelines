@@ -15,11 +15,11 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 
 from ai_client import required_setting
 from knowledge import seed_knowledge
+from provisioning_credential import provisioning_credential
 from storage import BlobStore
 
 API_VERSION = "2026-08-01-preview"
@@ -201,7 +201,7 @@ def main():
     if not any(path.name.lower() != "readme.md" for path in args.knowledge_dir.glob("*.md")):
         raise ValueError("Knowledge source directory must contain policy markdown files.")
     account = settings["AZURE_STORAGE_RESOURCE_ID"].rstrip("/").rsplit("/", 1)[-1]
-    with DefaultAzureCredential() as credential:
+    with provisioning_credential() as credential:
         with BlobServiceClient(f"https://{account}.blob.core.windows.net", credential=credential) as service:
             uploaded = seed_knowledge(
                 BlobStore(service), settings["KNOWLEDGE_CONTAINER"], args.knowledge_dir,
