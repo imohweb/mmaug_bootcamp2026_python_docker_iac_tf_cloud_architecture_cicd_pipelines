@@ -52,6 +52,8 @@ The source knowledge is in [support-agent/knowledge](support-agent/knowledge).
 Search indexing and agent grounding are separate from ticket storage.
 The state container is never granted to either application identity.
 See [architecture details](docs/architecture.md).
+For larger, presentation-friendly diagrams of runtime, Azure resources, CI/CD
+and optional extensions, see [expanded architecture views](docs/architecture-expanded.md).
 
 ## Run locally without Azure
 

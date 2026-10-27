@@ -1,6 +1,8 @@
 # Architecture: two web apps, indexed knowledge and OIDC infrastructure delivery
 
-The canonical component diagram is embedded in the [repository README](../README.md).
+The compact component diagram is embedded in the [repository README](../README.md).
+For presentation-friendly runtime, Azure resource, CI/CD and optional extension
+diagrams, see [expanded architecture views](architecture-expanded.md).
 The existing resource group is **RG-MMAUG-Bootcamp**. No VM or new group is
 deployed. A shared Linux App Service plan hosts separate frontend and backend
 web apps.
