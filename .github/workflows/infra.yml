@@ -7,6 +7,7 @@
 # RESOURCE_PREFIX: unique 6-18 lowercase/digit prefix starting with a letter.
 # WEB_IDENTITY_RESOURCE_ID: existing user-assigned identity for both web apps.
 # Optional environment VARIABLE: FOUNDRY_LOCATION (default eastus2; verify quota).
+# Optional environment VARIABLE: SEARCH_LOCATION (defaults to FOUNDRY_LOCATION).
 # No client secret required; GitHub supplies OIDC tokens automatically.
 # ADMIN PREREQUISITES: existing identity attachment and Blob/Search/Foundry access.
 # Terraform does not grant roles. Verify external access before selecting apply.
@@ -58,6 +59,7 @@ jobs:
       TF_VAR_prefix: ${{ vars.RESOURCE_PREFIX }}
       TF_VAR_storage_account_name: ${{ vars.STATE_ACCOUNT }}
       TF_VAR_foundry_location: ${{ vars.FOUNDRY_LOCATION || 'eastus2' }}
+      TF_VAR_search_location: ${{ vars.SEARCH_LOCATION }}
       TF_VAR_web_identity_resource_id: ${{ vars.WEB_IDENTITY_RESOURCE_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

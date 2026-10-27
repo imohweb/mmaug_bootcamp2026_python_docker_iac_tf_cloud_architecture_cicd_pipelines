@@ -88,6 +88,12 @@ variable "foundry_location" {
   description = "Verify Foundry Agent Service support and chosen model/version/SKU quota here."
 }
 
+variable "search_location" {
+  type        = string
+  default     = ""
+  description = "Optional Azure AI Search region; empty uses foundry_location. Set when Search capacity is unavailable there."
+}
+
 variable "model_name" {
   type    = string
   default = "gpt-6.1-sol"

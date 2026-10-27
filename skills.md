@@ -140,7 +140,8 @@ Configure **GitHub environment `dev`**:
   `AZURE_SUBSCRIPTION_ID`.
 - Infrastructure target: `AZURE_RESOURCE_GROUP=RG-MMAUG-Bootcamp`,
   `STATE_ACCOUNT` (globally unique storage name), `RESOURCE_PREFIX` and optional
-  `FOUNDRY_LOCATION` (defaults to eastus2), as named in
+  `FOUNDRY_LOCATION` (defaults to eastus2) and optional `SEARCH_LOCATION`
+  (defaults to `FOUNDRY_LOCATION`), as named in
   [infra.yml](.github/workflows/infra.yml).
 - Runtime identity: `WEB_IDENTITY_RESOURCE_ID`, the full resource ID of the
   existing user-assigned identity for both web apps. This is separate from the
@@ -361,6 +362,7 @@ variables and not secrets):
 | `RESOURCE_PREFIX` | Presenter-approved unique 6–18 character lowercase/digit prefix starting with a letter. |
 | `WEB_IDENTITY_RESOURCE_ID` | Full resource ID of the existing administrator-approved user-assigned identity used by both apps; attachment and runtime access must be verified. |
 | `FOUNDRY_LOCATION` | Optional; use the approved location (current default is `eastus2`) only after availability/quota review. |
+| `SEARCH_LOCATION` | Optional Azure AI Search region; empty uses `FOUNDRY_LOCATION`. Set it when Search capacity is unavailable in the Foundry region. |
 | `ACR_NAME` | Terraform output after successful infrastructure apply. |
 | `BACKEND_WEB_APP_NAME` | Terraform output after successful infrastructure apply. |
 | `FRONTEND_WEB_APP_NAME` | Terraform output after successful infrastructure apply. |

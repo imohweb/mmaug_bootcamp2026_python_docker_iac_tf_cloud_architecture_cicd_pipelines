@@ -25,7 +25,7 @@ resource "azurerm_search_service" "knowledge" {
   count                         = var.enable_foundry ? 1 : 0
   name                          = local.search_service_name
   resource_group_name           = data.azurerm_resource_group.demo.name
-  location                      = var.foundry_location
+  location                      = coalesce(var.search_location, var.foundry_location)
   sku                           = "basic"
   replica_count                 = 1
   partition_count               = 1
